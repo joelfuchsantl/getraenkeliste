@@ -1,0 +1,925 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<title>Getränkeliste</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍺</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Optik „Theke“: Schwarz und Weiß */
+:root{
+  --bg:#000000; --surface:#161616; --ink:#F3EEDF; --muted:#A8A49A; --line:#2A2A2A; --edge:#4D4B47;
+  --accent:#FFFFFF; --accent-ink:#000000; --accent-text:#FFFFFF; --red:#F08A7E; --focus:#FFFFFF;
+  --display:"Bricolage Grotesque","Arial Narrow",system-ui,sans-serif;
+  --body:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif;
+  color-scheme:dark;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.45 var(--body)}
+:focus-visible{outline:3px solid var(--focus);outline-offset:3px}
+button{font:inherit;color:inherit}
+a{color:var(--ink)}
+
+/* Kopfzeile */
+.top{position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--line);z-index:5}
+.bar{max-width:880px;margin:0 auto;padding:14px 18px 2px;display:flex;justify-content:space-between;align-items:center;gap:12px}
+.brand{font:800 22px/1 var(--display)}
+.who{display:flex;gap:14px;align-items:center;font-size:15px;color:var(--muted)}
+.who .link{color:var(--ink)}
+.tabs{max-width:880px;margin:0 auto;padding:0 10px;display:flex;overflow-x:auto}
+.tabs button{background:none;border:0;padding:10px 10px 11px;font-weight:500;color:var(--muted);border-bottom:3px solid transparent;cursor:pointer;white-space:nowrap}
+.tabs button.on{color:var(--ink);border-bottom-color:var(--accent-text)}
+.wrap{max-width:880px;margin:0 auto;padding:20px 18px 90px}
+
+/* Typo */
+.h{font:700 24px/1.2 var(--display);margin:34px 0 12px}
+.muted{color:var(--muted)}
+.label{font-size:15px;color:var(--muted)}
+.tag{font-size:13px;color:var(--muted);background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:2px 9px;white-space:nowrap}
+.link{background:none;border:0;padding:0;color:var(--ink);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+
+/* Kontostand */
+.balance{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;padding-bottom:18px;border-bottom:1px solid var(--line)}
+.balance>div{display:flex;flex-direction:column}
+.balance strong{color:#F2F2F2;font:800 clamp(48px,13vw,80px)/1 var(--display);font-variant-numeric:tabular-nums;margin-top:2px}
+.balance .cnt{color:var(--muted);font-size:15px;padding-bottom:8px;white-space:nowrap}
+
+/* Produkt-Knöpfe */
+.prods{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:22px 18px;margin-top:26px}
+.prod{display:flex;flex-direction:column;align-items:stretch;gap:12px}
+.pbtn{width:100%;background:none;border:0;padding:0;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:12px;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+.disc{position:relative;width:100%;aspect-ratio:2/1;border-radius:24px;display:grid;place-items:center;overflow:visible;transition:transform .12s ease,box-shadow .15s ease;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+.disc img{width:70%;height:76%;object-fit:contain}
+.disc.fill img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit}
+.disc .init{font:800 64px/1 var(--display);color:inherit;opacity:.92}
+.pbtn:active .disc{transform:scale(.96)}
+.prod.sel .disc{box-shadow:0 0 0 4px var(--bg),0 0 0 7px var(--accent)}
+.qty{position:absolute;top:-12px;right:-10px;z-index:1;min-width:42px;height:42px;padding:0 9px;border-radius:21px;background:var(--accent);color:var(--accent-ink);
+  font:800 22px/42px var(--display);text-align:center;box-shadow:0 0 0 3px var(--bg)}
+.pmeta{display:flex;justify-content:space-between;align-items:center;gap:12px;min-height:44px;padding:0 4px}
+.pmeta>div{display:flex;align-items:baseline;gap:10px;min-width:0}
+.pname{font:700 26px/1.1 var(--display)}
+.pprice{font-size:16px;color:var(--muted);white-space:nowrap}
+.rm{min-height:44px;padding:0 22px;border-radius:22px;border:1.5px solid var(--edge);background:transparent;color:var(--ink);font-size:15px;font-weight:500;cursor:pointer}
+.rm-space{height:44px}
+.more{width:100%;display:flex;justify-content:space-between;align-items:center;gap:12px;min-height:48px;padding:0 2px;background:none;border:0;border-bottom:1px solid var(--line);color:var(--muted);font-weight:600;cursor:pointer;text-align:left}
+.more svg{transition:transform .15s ease}
+.more[aria-expanded="true"] svg{transform:rotate(180deg)}
+.phint{text-align:center;color:var(--muted);font-size:15px;margin:18px 0 0}
+
+/* Listen */
+.rows{list-style:none;padding:0;margin:0;border-top:1px solid var(--line)}
+.rows li{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;padding:11px 2px;border-bottom:1px solid var(--line)}
+.rows .t{color:var(--muted);font-variant-numeric:tabular-nums;min-width:118px;font-size:14px}
+.rows .d{flex:1;min-width:120px}
+.rows .m{font-variant-numeric:tabular-nums;font-weight:600;min-width:74px;text-align:right}
+.rows .s{min-width:112px;text-align:right}
+.rows li.off{opacity:.55}
+.people .name{font-weight:600;text-decoration:none;flex:1;text-align:left;min-width:120px}
+.detail{flex-basis:100%;background:var(--surface);border-radius:12px;padding:10px 14px;margin:6px 0 4px}
+.detail .rows{border-top:0}
+.detail .rows li:last-child{border-bottom:0}
+
+/* Buttons & Formulare */
+.btn{font-weight:600;padding:10px 18px;border-radius:12px;border:1.5px solid var(--edge);background:transparent;color:var(--ink);cursor:pointer}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.danger{color:var(--red);border-color:var(--red)}
+.btn.small{padding:6px 12px;font-size:14px;border-radius:10px}
+.btn:disabled{opacity:.4;cursor:default}
+label{display:flex;flex-direction:column;gap:5px;font-size:14px;color:var(--muted);font-weight:500}
+input,select{font:16px var(--body);color:var(--ink);padding:10px 12px;border:1.5px solid var(--edge);border-radius:10px;background:var(--surface);min-width:0}
+input[type=file]{padding:8px}
+input:focus,select:focus{border-color:var(--accent-text);outline:none;box-shadow:0 0 0 3px rgba(255,255,255,.2)}
+.stack{display:flex;flex-direction:column;gap:12px}
+.narrow{max-width:360px}
+.inline{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
+.err{color:var(--red);margin:0;flex-basis:100%;font-size:14px}
+.err:empty{display:none}
+.sub{display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 20px}
+.sub button{border:1.5px solid var(--line);background:transparent;border-radius:999px;padding:7px 15px;font-weight:500;color:var(--ink);cursor:pointer}
+.sub button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.between{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.empty{padding:24px;border:1.5px dashed var(--edge);border-radius:14px;text-align:center}
+.empty p{margin:0 0 12px}
+
+/* Getränke-Verwaltung */
+.drink{display:flex;flex-wrap:wrap;gap:12px 14px;align-items:flex-end;padding:18px 0;border-bottom:1px solid var(--line)}
+.drink.off{opacity:.6}
+.drink-prev{flex:none}
+.drink-prev .disc{width:112px;height:56px;border-radius:12px}
+.drink-prev .disc .init{font-size:24px}
+.drink .fname{flex:1 1 170px}
+.drink .fprice,.drink .forder{width:110px}
+.drink .fmsg,.drink .flogo{flex-basis:100%}
+.drink .fmsg small{font-weight:400}
+.swatches{border:0;padding:0;margin:0;display:flex;gap:10px;flex-wrap:wrap;flex-basis:100%}
+.swatches legend{font-size:14px;color:var(--muted);font-weight:500;margin-bottom:6px;padding:0}
+.sw{position:relative;display:block}
+.sw input{position:absolute;opacity:0;width:1px;height:1px}
+.sw span{display:block;width:32px;height:32px;border-radius:50%;cursor:pointer;box-shadow:inset 0 0 0 1px rgba(255,255,255,.15)}
+.sw input:checked+span{outline:3px solid var(--accent-text);outline-offset:2px}
+.sw input:focus-visible+span{outline:3px solid var(--ink);outline-offset:2px}
+.check{flex-direction:row;align-items:center;gap:8px;color:var(--ink);flex-basis:100%}
+
+/* Login */
+.auth{min-height:100svh;display:grid;place-items:center;padding:24px}
+.auth-box{width:100%;max-width:340px}
+.auth-mark{width:132px;aspect-ratio:2/1;border-radius:18px;background:#F2F2F2;color:#000;display:grid;place-items:center;margin-bottom:22px;font:800 38px/1 var(--display);letter-spacing:.02em;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+.auth h1{font:800 44px/1 var(--display);margin:0 0 6px}
+.auth p.intro{margin:0 0 20px;color:var(--muted)}
+.center{min-height:60vh;display:grid;place-items:center;padding:24px;text-align:center}
+
+/* Toast */
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translate(-50%,160%);
+  background:var(--ink);color:var(--bg);border-radius:14px;padding:12px 16px;display:flex;gap:18px;align-items:center;
+  max-width:calc(100% - 32px);transition:transform .2s ease,visibility 0s .2s;visibility:hidden;z-index:10;box-shadow:0 8px 26px rgba(0,0,0,.35)}
+.toast.show{transform:translate(-50%,0);visibility:visible;transition:transform .2s ease}
+.toast.err{background:#B8322A;color:#fff}
+.toast button{background:none;border:0;color:inherit;font-weight:700;text-decoration:underline;text-underline-offset:3px;cursor:pointer;padding:4px;white-space:nowrap}
+
+/* Auswahl-Leiste unten */
+.cart{position:fixed;left:12px;right:12px;bottom:calc(14px + env(safe-area-inset-bottom,0px));z-index:8;max-width:720px;margin:0 auto;
+  background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:22px;padding:12px 12px 12px 20px;box-shadow:0 10px 30px rgba(0,0,0,.6)}
+.cart-in{display:flex;align-items:center;gap:14px}
+.cart-sum{flex:1;min-width:0;display:flex;flex-direction:column}
+.cart-sum b{font:800 28px/1.05 var(--display);font-variant-numeric:tabular-nums;white-space:nowrap}
+.cart-sum span{font-size:14px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cart .link{color:var(--ink)}
+.cart .btn.primary{min-height:56px;padding:0 28px;font-size:18px;border-radius:16px}
+body:has(.cart) .wrap{padding-bottom:160px}
+body:has(.cart) .toast{bottom:calc(110px + env(safe-area-inset-bottom,0px))}
+
+/* Rückfrage-Dialog */
+.ask{position:fixed;inset:0;z-index:20;display:grid;place-items:center;padding:16px}
+.ask .scrim{position:absolute;inset:0;background:rgba(0,0,0,.7)}
+.ask form{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:22px;width:100%;max-width:380px;box-shadow:0 14px 40px rgba(0,0,0,.4);display:flex;flex-direction:column;gap:14px}
+.ask p{margin:0;font-size:17px}
+.ask .acts{display:flex;justify-content:flex-end;gap:8px}
+
+/* Danke-Bildschirm nach dem Buchen */
+.ask:has(form.done){padding:0}
+.ask:has(form.done) .scrim{background:var(--bg)}
+.ask form.done{background:transparent;border:0;box-shadow:none;max-width:460px;height:100%;padding:calc(70px + env(safe-area-inset-top,0px)) 24px calc(28px + env(safe-area-inset-bottom,0px));align-items:center;text-align:center;gap:20px}
+.done-discs{display:flex}
+.done-discs .disc{width:150px;height:75px;border-radius:16px;box-shadow:0 0 0 4px var(--bg)}
+.done-discs .disc+.disc{margin-left:-18px;transform:rotate(4deg)}
+.done-discs .disc:first-child{transform:rotate(-4deg)}
+.done-discs .disc .init{font-size:32px}
+.ask .done-head{font:800 clamp(40px,12vw,54px)/1.02 var(--display);margin:0;text-wrap:balance}
+.ask .done-sub{font-size:23px;line-height:1.3;font-weight:600;color:var(--accent-text);margin:0;text-wrap:balance;max-width:320px}
+.ask .done-sum{color:var(--muted);font-size:16px;margin:0}
+.done .acts{margin-top:auto;align-self:stretch;flex-direction:column;gap:10px}
+.done .acts .btn.primary{min-height:56px;font-size:18px;border-radius:16px;background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.done .acts .btn{min-height:48px;border-radius:16px}
+
+@media (max-width:520px){
+  .rows .t{min-width:0;flex-basis:100%}
+  .rows .s{min-width:0}
+}
+@media (prefers-reduced-motion:reduce){
+  .disc,.toast{transition:none}
+  .pbtn:active .disc{transform:none}
+}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script type="module">
+/* ============================================================
+   KONFIGURATION – aus der Firebase-Konsole hier einfügen
+   (Projekteinstellungen → Allgemein → Deine Apps → Web-App)
+   ============================================================ */
+const firebaseConfig = {
+  apiKey: "HIER_EINTRAGEN",
+  authDomain: "HIER_EINTRAGEN.firebaseapp.com",
+  projectId: "HIER_EINTRAGEN",
+  storageBucket: "HIER_EINTRAGEN.appspot.com",
+  messagingSenderId: "HIER_EINTRAGEN",
+  appId: "HIER_EINTRAGEN"
+};
+// Aus dem Namen wird intern eine Login-Adresse gebaut (es werden nie Mails verschickt)
+const LOGIN_DOMAIN = "getraenkeliste.app";
+// Wie lange eine eigene Buchung rückgängig gemacht werden kann (muss zu firestore.rules passen)
+const UNDO_MINUTES = 5;
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import { getAuth, initializeAuth, inMemoryPersistence, onAuthStateChanged, signInWithEmailAndPassword,
+  createUserWithEmailAndPassword, signOut, updatePassword, reauthenticateWithCredential, EmailAuthProvider
+} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
+import { getFirestore, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, collection, query, where,
+  orderBy, limit, onSnapshot, serverTimestamp, writeBatch
+} from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+
+/* ---------- Helfer ---------- */
+const $app = document.getElementById("app");
+const CONFIGURED = !String(firebaseConfig.apiKey).startsWith("HIER");
+const COLORS = [
+  { n: "Flaschengrün", v: "#1E6A48" }, { n: "Rot", v: "#E31D29" }, { n: "Bernstein", v: "#B07A0E" },
+  { n: "Blau", v: "#1F4E8C" }, { n: "Braun", v: "#6B3F22" }, { n: "Petrol", v: "#11706F" },
+  { n: "Violett", v: "#5B3A7A" }, { n: "Grau", v: "#4A525C" }, { n: "Weiß", v: "#F2F2F2" }
+];
+const eur = new Intl.NumberFormat("de-AT", { style: "currency", currency: "EUR" });
+const dtf = new Intl.DateTimeFormat("de-AT", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" });
+const fmt = c => eur.format((c || 0) / 100);
+const tsMs = e => (e.ts && e.ts.toMillis) ? e.ts.toMillis() : Date.now();
+const fdate = e => dtf.format(new Date(tsMs(e)));
+const total = l => l.reduce((a, e) => a + e.price * e.qty, 0);
+const qty = l => l.reduce((a, e) => a + e.qty, 0);
+const byTsDesc = (a, b) => tsMs(b) - tsMs(a);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const safeColor = c => /^#[0-9a-fA-F]{6}$/.test(c || "") ? c : COLORS[0].v;
+const centsToInput = c => (c / 100).toFixed(2).replace(".", ",");
+const mapDocs = s => s.docs.map(d => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) }));
+const slug = n => String(n).trim().toLowerCase()
+  .replace(/ä/g, "ae").replace(/ö/g, "oe").replace(/ü/g, "ue").replace(/ß/g, "ss")
+  .replace(/[^a-z0-9._-]+/g, ".").replace(/^\.+|\.+$/g, "");
+const toEmail = n => slug(n) + "@" + LOGIN_DOMAIN;
+function parseCents(v) {
+  const s = String(v).trim().replace(/\s|€/g, "").replace(",", ".");
+  if (!/^\d+(\.\d{1,2})?$/.test(s)) return null;
+  return Math.round(parseFloat(s) * 100);
+}
+function groupByDrink(list) {
+  const m = new Map();
+  list.forEach(e => { const r = m.get(e.drinkName) || { name: e.drinkName, n: 0, sum: 0 }; r.n += e.qty; r.sum += e.price * e.qty; m.set(e.drinkName, r); });
+  return [...m.values()].sort((a, b) => b.n - a.n);
+}
+
+// Kronkorken: gezackter Kreis, 21 Zacken wie beim echten
+const CAP = (() => {
+  const teeth = 21, n = teeth * 2, pts = [];
+  for (let i = 0; i < n; i++) {
+    const a = i / n * Math.PI * 2 - Math.PI / 2, r = i % 2 ? 45.5 : 50;
+    pts.push((50 + r * Math.cos(a)).toFixed(2) + "," + (50 + r * Math.sin(a)).toFixed(2));
+  }
+  return "M" + pts.join("L") + "Z";
+})();
+const safeLogo = v => /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.test(v || "") ? v : "";
+const initials = n => String(n).split(/\s+/).filter(w => /[A-Za-zÄÖÜäöü0-9]/.test(w)).slice(0, 2).map(w => w[0].toUpperCase()).join("");
+const textOn = c => { const h = safeColor(c), r = parseInt(h.slice(1, 3), 16), g = parseInt(h.slice(3, 5), 16), b = parseInt(h.slice(5, 7), 16);
+  return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? "#111111" : "#FFFFFF"; };
+const disc = (d, extra = "") => `<span class="disc${d.logoFill && safeLogo(d.logo) ? " fill" : ""}" style="background:${safeColor(d.color)};color:${textOn(d.color)}">${safeLogo(d.logo)
+  ? `<img src="${esc(d.logo)}" alt="">` : `<span class="init" aria-hidden="true">${esc(initials(d.name))}</span>`}${extra}</span>`;
+// Logo-Datei verkleinern (max. 256 px) und als PNG-Daten speichern, passt so ins Getränke-Dokument
+function readLogo(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onerror = () => rej({ message: "Bild konnte nicht gelesen werden." });
+    r.onload = () => {
+      const img = new Image();
+      img.onerror = () => rej({ message: "Das ist kein gültiges Bild." });
+      img.onload = () => {
+        const k = Math.min(1, 400 / Math.max(img.naturalWidth || 400, img.naturalHeight || 400));
+        const c = document.createElement("canvas");
+        c.width = Math.max(1, Math.round((img.naturalWidth || 400) * k));
+        c.height = Math.max(1, Math.round((img.naturalHeight || 400) * k));
+        c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+        res(c.toDataURL("image/png"));
+      };
+      img.src = r.result;
+    };
+    r.readAsDataURL(file);
+  });
+}
+const capSvg = color => `<svg viewBox="0 0 100 100" aria-hidden="true"><path d="${CAP}" style="fill:${safeColor(color)}"/><circle cx="50" cy="50" r="37" class="ring"/></svg>`;
+
+function msg(e) {
+  const c = e?.code || "";
+  return ({
+    "auth/invalid-credential": "Name oder Passwort falsch.",
+    "auth/wrong-password": "Passwort falsch.",
+    "auth/user-not-found": "Name oder Passwort falsch.",
+    "auth/invalid-email": "Dieser Name ist ungültig.",
+    "auth/email-already-in-use": "Diesen Namen gibt es schon. Bitte einen anderen wählen.",
+    "auth/weak-password": "Das Passwort braucht mindestens 6 Zeichen.",
+    "auth/too-many-requests": "Zu viele Versuche. Kurz warten und nochmal probieren.",
+    "auth/network-request-failed": "Keine Verbindung zum Server.",
+    "auth/requires-recent-login": "Bitte ab- und wieder anmelden, dann nochmal versuchen.",
+    "permission-denied": "Nicht erlaubt. Zeitfenster abgelaufen oder Konto nicht aktiv.",
+    "unavailable": "Keine Verbindung zum Server."
+  })[c] || e?.message || "Unbekannter Fehler.";
+}
+
+let toastTimer;
+function toast(text, action, isErr) {
+  const t = document.getElementById("toast");
+  const hide = () => { t.className = "toast"; };
+  t.className = "toast show" + (isErr ? " err" : "");
+  t.innerHTML = `<span>${esc(text)}</span>${action ? `<button type="button">${esc(action.label)}</button>` : ""}`;
+  if (action) t.querySelector("button").onclick = () => { hide(); action.fn(); };
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(hide, action ? 6000 : 3500);
+}
+
+
+/* Rückfragen im Seiten-Stil statt Browser-Popups */
+function dialog(html, focusSel, autoCloseMs) {
+  return new Promise(res => {
+    const w = document.createElement("div");
+    w.className = "ask";
+    w.innerHTML = `<div class="scrim" data-x></div><form role="dialog" aria-modal="true">${html}</form>`;
+    document.body.appendChild(w);
+    const f = w.querySelector("form");
+    if (f.querySelector("[data-done]")) f.classList.add("done");
+    const done = v => { w.remove(); document.removeEventListener("keydown", key); res(v); };
+    const key = e => { if (e.key === "Escape") done(null); };
+    document.addEventListener("keydown", key);
+    w.querySelectorAll("[data-x]").forEach(b => b.addEventListener("click", () => done(null)));
+    w.querySelectorAll("[data-r]").forEach(b => b.addEventListener("click", () => done(b.dataset.r)));
+    if (autoCloseMs) setTimeout(() => { if (w.isConnected) done(null); }, autoCloseMs);
+    f.addEventListener("submit", e => { e.preventDefault(); e.stopPropagation(); const i = f.querySelector("input"); done(i ? i.value : true); });
+    (f.querySelector(focusSel) || f.querySelector("button[type=submit]")).focus();
+  });
+}
+const ask = (text, ok = "OK", danger = false) => dialog(`<p>${esc(text)}</p><div class="acts">
+  <button type="button" class="btn" data-x>Abbrechen</button>
+  <button type="submit" class="btn ${danger ? "danger" : "primary"}">${esc(ok)}</button></div>`).then(v => v === true);
+const askText = (label, value, ok = "OK") => dialog(`<label>${esc(label)}<input value="${esc(value)}" maxlength="30"></label><div class="acts">
+  <button type="button" class="btn" data-x>Abbrechen</button>
+  <button type="submit" class="btn primary">${esc(ok)}</button></div>`, "input");
+
+/* ---------- Zustand ---------- */
+const S = {
+  ready: false, user: null, me: null, needSetup: false, blocked: false, settingUp: false,
+  drinks: [], mine: [], users: [], open: [], recent: [],
+  view: "list", aview: "overview", sel: null, cart: {}, busy: false, pending: false
+};
+let app, auth, db, secAuth = null, unsubs = [];
+const isAdmin = () => S.me?.role === "admin";
+const canUndo = e => !e.settled && e.uid === S.me?.id && (Date.now() - tsMs(e)) < UNDO_MINUTES * 60000 - 5000;
+
+function teardown() {
+  unsubs.forEach(u => { try { u(); } catch {} });
+  unsubs = [];
+  Object.assign(S, { me: null, drinks: [], mine: [], users: [], open: [], recent: [], blocked: false, sel: null, cart: {}, busy: false });
+}
+
+/* ---------- Rendern (verschoben, solange ein Eingabefeld aktiv ist) ---------- */
+function inputFocused() {
+  const a = document.activeElement;
+  return a && $app.contains(a) && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName);
+}
+function render(force) {
+  if (!force && inputFocused()) { S.pending = true; return; }
+  S.pending = false;
+  $app.innerHTML = view();
+}
+document.addEventListener("focusout", () => setTimeout(() => { if (S.pending && !inputFocused()) render(); }, 800));
+setInterval(() => { if (S.me && S.view === "list") render(); }, 20000);
+
+function view() {
+  if (!CONFIGURED) return viewConfig();
+  if (!S.ready) return `<main class="center"><p class="muted">Lädt …</p></main>`;
+  if (!S.user) return viewAuth(S.needSetup ? "setup" : "login");
+  if (S.blocked) return viewBlocked();
+  if (S.view === "admin" && !isAdmin()) S.view = "list";
+  const body = { list: viewList, history: viewHistory, account: viewAccount, admin: viewAdmin }[S.view]();
+  return shell(body);
+}
+
+function shell(body) {
+  const tabs = [["list", "Buchen"], ["history", "Verlauf"], ["account", "Konto"]];
+  if (isAdmin()) tabs.push(["admin", "Verwaltung"]);
+  return `<header class="top">
+    <div class="bar">
+      <div class="brand">Getränkeliste</div>
+      <div class="who"><span>${esc(S.me.name)}</span><button class="link" data-act="logout">Abmelden</button></div>
+    </div>
+    <nav class="tabs">${tabs.map(([v, l]) => `<button data-act="nav" data-v="${v}" class="${S.view === v ? "on" : ""}"${S.view === v ? ' aria-current="page"' : ""}>${l}</button>`).join("")}</nav>
+  </header>
+  <main class="wrap">${body}</main>${S.view === "list" ? cartBar() : ""}`;
+}
+
+function cartItems() {
+  return Object.entries(S.cart)
+    .map(([id, n]) => ({ d: S.drinks.find(x => x.id === id && x.active), n }))
+    .filter(i => i.d && i.n > 0);
+}
+function cartBar() {
+  const items = cartItems();
+  if (!items.length) return "";
+  const n = items.reduce((a, i) => a + i.n, 0), sum = items.reduce((a, i) => a + i.n * i.d.price, 0);
+  return `<div class="cart" role="region" aria-label="Auswahl">
+    <div class="cart-in">
+      <div class="cart-sum"><b>${fmt(sum)}</b>
+        <span>${items.map(i => `${i.n}× ${esc(i.d.name)}`).join(", ")}</span></div>
+      <button class="link" data-act="clearcart">Leeren</button>
+      <button class="btn primary" data-act="checkout" ${S.busy ? "disabled" : ""}>Buchen</button>
+    </div>
+  </div>`;
+}
+
+function viewConfig() {
+  return `<main class="center"><div class="narrow">
+    <h1 class="h">Firebase-Konfiguration fehlt</h1>
+    <p>Trag in <b>index.html</b> oben bei <code>firebaseConfig</code> die Werte deiner Firebase-Web-App ein und lade die Seite neu.</p>
+  </div></main>`;
+}
+
+function viewAuth(mode) {
+  const setup = mode === "setup";
+  return `<main class="auth"><div class="auth-box">
+    <div class="auth-mark" aria-hidden="true">TCP</div>
+    <h1>Getränkeliste</h1>
+    <p class="intro">${setup ? "Ersteinrichtung: Leg das Admin-Konto an. Danach kannst du Getränke und Benutzer verwalten." : "Mit deinem Namen und Passwort anmelden."}</p>
+    <form data-form="${setup ? "setup" : "login"}" class="stack">
+      <label>Name<input name="name" required maxlength="30" autocomplete="username" autocapitalize="words"></label>
+      <label>Passwort<input type="password" name="pw" required ${setup ? 'minlength="6" autocomplete="new-password"' : 'autocomplete="current-password"'}></label>
+      ${setup ? `<label>Passwort wiederholen<input type="password" name="pw2" required minlength="6" autocomplete="new-password"></label>` : ""}
+      <button class="btn primary">${setup ? "Admin anlegen" : "Anmelden"}</button>
+      <p class="err"></p>
+    </form>
+  </div></main>`;
+}
+
+function viewBlocked() {
+  return `<main class="center"><div class="narrow">
+    <h1 class="h">Kein aktives Konto</h1>
+    <p>Dieses Login ist nicht (mehr) für die Getränkeliste freigeschaltet. Wende dich an den Admin.</p>
+    <button class="btn" data-act="logout">Abmelden</button>
+  </div></main>`;
+}
+
+function rowsMine(list) {
+  return `<ul class="rows">${list.map(e => `<li>
+    <span class="t">${fdate(e)}</span>
+    <span class="d">${e.qty > 1 ? e.qty + "× " : ""}${esc(e.drinkName)}</span>
+    <span class="m">${fmt(e.price * e.qty)}</span>
+    <span class="s">${e.settled ? '<span class="tag">abgerechnet</span>' : canUndo(e) ? `<button class="btn small" data-act="undo" data-id="${e.id}">Rückgängig</button>` : ""}</span>
+  </li>`).join("")}</ul>`;
+}
+function rowsSummary(list) {
+  return `<ul class="rows">${groupByDrink(list).map(g => `<li><span class="d">${g.n}× ${esc(g.name)}</span><span class="m">${fmt(g.sum)}</span></li>`).join("")}</ul>`;
+}
+
+function viewList() {
+  const open = S.mine.filter(e => !e.settled);
+  const cnt = qty(open);
+  const drinks = S.drinks.filter(d => d.active);
+  const prods = drinks.length
+    ? `<div class="prods">${drinks.map(d => { const n = S.cart[d.id] || 0; return `<div class="prod${n ? " sel" : ""}">
+        <button class="pbtn" data-act="pick" data-id="${d.id}" aria-label="${esc(d.name)}, ${fmt(d.price)}, ${n ? `${n} ausgewählt, noch eins dazu` : "auswählen"}">
+          ${disc(d, n ? `<span class="qty">${n}</span>` : "")}
+        </button>
+        <div class="pmeta"><div><span class="pname">${esc(d.name)}</span><span class="pprice">${fmt(d.price)}</span></div>
+          ${n ? `<button class="rm" data-act="unpick" data-id="${d.id}" aria-label="Ein ${esc(d.name)} entfernen">Entfernen</button>` : ""}</div>
+      </div>`; }).join("")}</div>
+      <p class="phint">${Object.keys(S.cart).length ? "Nochmal antippen erhöht die Menge." : "Antippen zum Auswählen, dann unten buchen."}</p>`
+    : `<div class="empty"><p>Noch keine Getränke angelegt.</p>${isAdmin() ? `<button class="btn primary" data-act="goto" data-v="drinks">Getränke anlegen</button>` : ""}</div>`;
+  // Zuletzt gebucht: erst 3 Einträge, der Rest aufklappbar
+  const LIMIT = 3, all = S.mine.slice(0, 10), recent = S.recentOpen ? all : all.slice(0, LIMIT);
+  const more = all.length > LIMIT ? `<button class="more" data-act="recent" aria-expanded="${S.recentOpen ? "true" : "false"}">
+      <span>${S.recentOpen ? "Weniger anzeigen" : `${all.length - LIMIT} weitere anzeigen`}</span>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
+    </button>${S.recentOpen && S.mine.length > all.length ? `<button class="more" data-act="nav" data-v="history"><span>Ganzen Verlauf ansehen</span></button>` : ""}` : "";
+  return `<section class="balance"><div>
+      <span class="label">Servus ${esc(S.me.name.split(" ")[0])}, offen sind</span>
+      <strong>${fmt(total(open))}</strong>
+    </div><span class="cnt">${cnt} ${cnt === 1 ? "Getränk" : "Getränke"}</span></section>
+    ${prods}
+    <h2 class="h">Zuletzt gebucht</h2>
+    ${recent.length ? rowsMine(recent) + more : '<p class="muted">Noch nichts gebucht.</p>'}`;
+}
+
+function viewHistory() {
+  const open = S.mine.filter(e => !e.settled);
+  const done = S.mine.filter(e => e.settled).slice(0, 50);
+  return `<h2 class="h">Offen: ${fmt(total(open))}</h2>
+    ${open.length ? rowsSummary(open) + `<h2 class="h">Einzelbuchungen offen</h2>` + rowsMine(open) : '<p class="muted">Alles abgerechnet.</p>'}
+    <h2 class="h">Bereits abgerechnet</h2>
+    ${done.length ? rowsMine(done) : '<p class="muted">Noch keine Abrechnung.</p>'}`;
+}
+
+function viewAccount() {
+  return `<h2 class="h">Konto</h2>
+    <p>Angemeldet als <b>${esc(S.me.name)}</b> <span class="muted">(Login-Name: ${esc(S.me.login)})</span></p>
+    <h2 class="h">Passwort ändern</h2>
+    <form data-form="pw" class="stack narrow">
+      <label>Aktuelles Passwort<input type="password" name="cur" required autocomplete="current-password"></label>
+      <label>Neues Passwort<input type="password" name="nw" required minlength="6" autocomplete="new-password"></label>
+      <label>Neues Passwort wiederholen<input type="password" name="nw2" required minlength="6" autocomplete="new-password"></label>
+      <button class="btn primary">Passwort ändern</button>
+      <p class="err"></p>
+    </form>`;
+}
+
+/* ---------- Verwaltung ---------- */
+function viewAdmin() {
+  const sub = [["overview", "Offene Beträge"], ["book", "Buchungen"], ["drinks", "Getränke"], ["users", "Benutzer"]];
+  const body = { overview: aOverview, book: aBook, drinks: aDrinks, users: aUsers }[S.aview]();
+  return `<nav class="sub">${sub.map(([v, l]) => `<button data-act="aview" data-v="${v}" class="${S.aview === v ? "on" : ""}">${l}</button>`).join("")}</nav>${body}`;
+}
+
+function aOverview() {
+  const by = new Map();
+  S.open.forEach(e => { const r = by.get(e.uid) || { uid: e.uid, name: e.userName, list: [] }; r.list.push(e); by.set(e.uid, r); });
+  S.users.forEach(u => {
+    if (by.has(u.id)) by.get(u.id).name = u.name;
+    else if (u.active) by.set(u.id, { uid: u.id, name: u.name, list: [] });
+  });
+  const rows = [...by.values()].sort((a, b) => total(b.list) - total(a.list) || a.name.localeCompare(b.name, "de"));
+  const people = rows.filter(r => r.list.length).length;
+  return `<section class="balance"><div>
+      <span class="label">Offen gesamt</span>
+      <strong>${fmt(total(S.open))}</strong>
+      <span class="muted">${qty(S.open)} Getränke bei ${people} ${people === 1 ? "Person" : "Personen"}</span>
+    </div></section>
+    <h2 class="h">Pro Person</h2>
+    <ul class="rows people">${rows.map(r => {
+      const n = qty(r.list), exp = S.sel === r.uid;
+      return `<li>
+        <button class="link name" data-act="sel" data-id="${r.uid}" aria-expanded="${exp}">${esc(r.name)}</button>
+        <span class="muted">${n}×</span>
+        <span class="m">${fmt(total(r.list))}</span>
+        <span class="s"><button class="btn small primary" data-act="settle" data-id="${r.uid}" ${n ? "" : "disabled"}>Abrechnen</button></span>
+        ${exp ? `<div class="detail">${n ? rowsSummary(r.list) + `<ul class="rows">${r.list.map(e => `<li>
+            <span class="t">${fdate(e)}</span><span class="d">${e.qty > 1 ? e.qty + "× " : ""}${esc(e.drinkName)}</span>
+            <span class="m">${fmt(e.price * e.qty)}</span>
+            <span class="s"><button class="btn small danger" data-act="delentry" data-id="${e.id}">Löschen</button></span></li>`).join("")}</ul>`
+          : '<p class="muted">Nichts offen.</p>'}</div>` : ""}
+      </li>`;
+    }).join("")}</ul>`;
+}
+
+function aBook() {
+  const users = S.users.filter(u => u.active), drinks = S.drinks.filter(d => d.active);
+  return `<h2 class="h">Für jemanden buchen</h2>
+    ${users.length && drinks.length ? `<form data-form="adminbook" class="inline">
+      <label>Person<select name="uid" required>${users.map(u => `<option value="${u.id}">${esc(u.name)}</option>`).join("")}</select></label>
+      <label>Getränk<select name="drink" required>${drinks.map(d => `<option value="${d.id}">${esc(d.name)} (${fmt(d.price)})</option>`).join("")}</select></label>
+      <label>Menge<input type="number" name="qty" min="1" max="50" value="1" required style="width:90px"></label>
+      <button class="btn primary">Buchen</button>
+      <p class="err"></p>
+    </form>` : '<p class="muted">Dafür braucht es mindestens einen aktiven Benutzer und ein aktives Getränk.</p>'}
+    <div class="between"><h2 class="h">Letzte Buchungen</h2><button class="btn small" data-act="csv">Alle als CSV exportieren</button></div>
+    ${S.recent.length ? `<ul class="rows">${S.recent.map(e => `<li>
+      <span class="t">${fdate(e)}</span>
+      <span class="d"><b>${esc(e.userName)}</b>: ${e.qty > 1 ? e.qty + "× " : ""}${esc(e.drinkName)}</span>
+      <span class="m">${fmt(e.price * e.qty)}</span>
+      <span class="s">${e.settled ? '<span class="tag">abgerechnet</span>' : `<button class="btn small danger" data-act="delentry" data-id="${e.id}">Löschen</button>`}</span>
+    </li>`).join("")}</ul>` : '<p class="muted">Noch keine Buchungen.</p>'}`;
+}
+
+function drinkForm(d) {
+  const color = safeColor(d?.color || COLORS[0].v);
+  return `<form data-form="drink" data-id="${d ? d.id : ""}" class="drink ${d && !d.active ? "off" : ""}">
+    <div class="drink-prev">${disc({ ...(d || { name: "?" }), color })}</div>
+    <label class="fname">Name<input name="name" required maxlength="30" value="${esc(d?.name || "")}" placeholder="z. B. RedBull"></label>
+    <label class="fprice">Preis in €<input name="price" required inputmode="decimal" value="${d ? centsToInput(d.price) : ""}" placeholder="2,50"></label>
+    <label class="forder">Reihenfolge<input type="number" name="order" value="${d?.order ?? S.drinks.length + 1}"></label>
+    <label class="fmsg">Text nach dem Buchen <small>({Name} wird durch den Namen ersetzt)</small><input name="message" maxlength="160" value="${esc(d?.message || "")}" placeholder="z. B. Danke {Name}! Pfand bitte wieder zurückbringen."></label>
+    <label class="flogo">Logo (optional, PNG, JPG oder WebP)<input type="file" name="logofile" accept="image/png,image/jpeg,image/webp"></label>
+    <label class="check"><input type="checkbox" name="logofill" ${d?.logoFill ? "checked" : ""}> Logo füllt die ganze Kachel (gut für Logos mit eigenem Hintergrund)</label>
+    ${d && safeLogo(d.logo) ? `<label class="check"><input type="checkbox" name="logoclear"> Logo entfernen</label>` : ""}
+    <fieldset class="swatches"><legend>Farbe</legend>${COLORS.map(c => `<label class="sw" title="${c.n}"><input type="radio" name="color" value="${c.v}" ${color === c.v ? "checked" : ""} aria-label="${c.n}"><span style="background:${c.v}"></span></label>`).join("")}</fieldset>
+    ${d ? `<label class="check"><input type="checkbox" name="active" ${d.active ? "checked" : ""}> In der Strichliste anzeigen</label>` : ""}
+    <button class="btn primary">${d ? "Speichern" : "Getränk anlegen"}</button>
+    <p class="err"></p>
+  </form>`;
+}
+function aDrinks() {
+  return `<p class="muted">Preisänderungen gelten nur für neue Buchungen. Bereits gebuchte Striche behalten ihren Preis.</p>
+    <h2 class="h">Neues Getränk</h2>${drinkForm(null)}
+    <h2 class="h">Getränke</h2>${S.drinks.length ? S.drinks.map(drinkForm).join("") : '<p class="muted">Noch keine angelegt.</p>'}`;
+}
+
+function aUsers() {
+  return `<h2 class="h">Neuer Benutzer</h2>
+    <form data-form="newuser" class="inline">
+      <label>Name<input name="name" required maxlength="30" autocomplete="off" autocapitalize="words"></label>
+      <label>Startpasswort<input name="pw" required minlength="6" autocomplete="off"></label>
+      <label>Rolle<select name="role"><option value="user">Benutzer</option><option value="admin">Admin</option></select></label>
+      <button class="btn primary">Benutzer anlegen</button>
+      <p class="err"></p>
+    </form>
+    <p class="muted">Anmeldung mit Name und Startpasswort. Das Passwort ändert jede Person danach selbst unter Konto.</p>
+    <h2 class="h">Alle Benutzer</h2>
+    <ul class="rows">${S.users.map(u => `<li class="${u.active ? "" : "off"}">
+      <span class="d"><b>${esc(u.name)}</b> <span class="muted">${esc(u.login)}</span></span>
+      <span class="tag">${u.role === "admin" ? "Admin" : "Benutzer"}${u.active ? "" : ", inaktiv"}</span>
+      <span class="s">${u.id === S.me.id ? '<span class="muted">Das bist du</span>' : `
+        <button class="btn small" data-act="rename" data-id="${u.id}">Umbenennen</button>
+        <button class="btn small" data-act="role" data-id="${u.id}">${u.role === "admin" ? "Admin entziehen" : "Zum Admin machen"}</button>
+        <button class="btn small ${u.active ? "danger" : ""}" data-act="active" data-id="${u.id}">${u.active ? "Deaktivieren" : "Aktivieren"}</button>`}</span>
+    </li>`).join("")}</ul>`;
+}
+
+/* ---------- Sitzung ---------- */
+async function startSession(u) {
+  teardown();
+  S.user = u;
+  let snap = null;
+  try { snap = await getDoc(doc(db, "users", u.uid)); } catch (e) { console.error(e); }
+  if (!snap || !snap.exists() || snap.data().active !== true) { S.blocked = true; S.ready = true; render(true); return; }
+  S.me = { id: u.uid, ...snap.data() };
+  const onErr = e => { console.error(e); toast(msg(e), null, true); };
+
+  unsubs.push(onSnapshot(doc(db, "users", u.uid), d => {
+    if (!d.exists() || d.data().active !== true) { signOut(auth); return; }
+    const wasAdmin = isAdmin();
+    S.me = { id: u.uid, ...d.data() };
+    if (wasAdmin !== isAdmin()) { startSession(u); return; }
+    render();
+  }, onErr));
+  unsubs.push(onSnapshot(collection(db, "drinks"), s => {
+    S.drinks = mapDocs(s).sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.name.localeCompare(b.name, "de"));
+    render();
+  }, onErr));
+  unsubs.push(onSnapshot(query(collection(db, "entries"), where("uid", "==", u.uid)), s => {
+    S.mine = mapDocs(s).sort(byTsDesc); render();
+  }, onErr));
+  if (S.me.role === "admin") {
+    unsubs.push(onSnapshot(collection(db, "users"), s => {
+      S.users = mapDocs(s).sort((a, b) => a.name.localeCompare(b.name, "de")); render();
+    }, onErr));
+    unsubs.push(onSnapshot(query(collection(db, "entries"), where("settled", "==", false)), s => {
+      S.open = mapDocs(s).sort(byTsDesc); render();
+    }, onErr));
+    unsubs.push(onSnapshot(query(collection(db, "entries"), orderBy("ts", "desc"), limit(300)), s => {
+      S.recent = mapDocs(s); render();
+    }, onErr));
+  }
+  S.ready = true;
+  render(true);
+}
+
+function getSecondaryAuth() {
+  if (!secAuth) secAuth = initializeAuth(initializeApp(firebaseConfig, "secondary"), { persistence: inMemoryPersistence });
+  return secAuth;
+}
+
+/* ---------- Aktionen ---------- */
+function pick(id, step) {
+  const n = Math.max(0, Math.min(20, (S.cart[id] || 0) + step));
+  if (n) S.cart[id] = n; else delete S.cart[id];
+  if (step > 0) navigator.vibrate?.(10);
+  render(true);
+}
+// Pro Getränk eine Buchung mit Menge, alles in einem Rutsch gespeichert
+async function checkout() {
+  const items = cartItems();
+  if (!items.length || S.busy) return;
+  S.busy = true; render(true);
+  try {
+    const b = writeBatch(db), ids = [];
+    items.forEach(({ d, n }) => {
+      const ref = doc(collection(db, "entries"));
+      ids.push(ref.id);
+      b.set(ref, { uid: S.me.id, userName: S.me.name, drinkId: d.id, drinkName: d.name, price: d.price,
+        qty: n, ts: serverTimestamp(), settled: false, by: S.me.id });
+    });
+    await b.commit();
+    S.cart = {};
+    const n = items.reduce((a, i) => a + i.n, 0), sum = items.reduce((a, i) => a + i.n * i.d.price, 0);
+    showBooked(items, ids, sum);
+  } catch (e) { toast(msg(e), null, true); }
+  finally { S.busy = false; render(true); }
+}
+// Bestätigung mit dem beim Produkt hinterlegten Text; {Name} wird durch den Namen ersetzt
+async function showBooked(items, ids, sum) {
+  const texts = [...new Set(items.map(i => String(i.d.message || "").trim()).filter(Boolean))]
+    .map(t => t.replace(/\{name\}/gi, S.me.name.split(" ")[0]));
+  const what = items.map(i => `${i.n}× ${i.d.name}`).join(", ");
+  if (!texts.length) {
+    toast(`Gebucht: ${what}, ${fmt(sum)}`, { label: "Rückgängig", fn: () => undoMany(ids) });
+    return;
+  }
+  // erster Satz groß, der Rest als Hinweis darunter
+  const parts = texts.map(t => { const m = t.match(/^(.+?[.!?])\s+(.+)$/s); return m ? [m[1], m[2]] : [t, ""]; });
+  const r = await dialog(`<div class="done-discs" data-done>${items.slice(0, 3).map(i => disc(i.d)).join("")}</div>
+    ${parts.map(([h, sub]) => `<p class="done-head">${esc(h)}</p>${sub ? `<p class="done-sub">${esc(sub)}</p>` : ""}`).join("")}
+    <p class="done-sum">${esc(what)} gebucht, ${fmt(sum)}</p>
+    <div class="acts"><button type="submit" class="btn primary">Fertig</button>
+    <button type="button" class="btn" data-r="undo">Rückgängig</button></div>`, null, 15000);
+  if (r === "undo") undoMany(ids);
+}
+async function undoMany(ids) {
+  try {
+    const b = writeBatch(db);
+    ids.forEach(id => b.delete(doc(db, "entries", id)));
+    await b.commit();
+    toast("Buchung entfernt");
+  } catch (e) { toast(msg(e), null, true); }
+}
+async function undo(id) {
+  try { await deleteDoc(doc(db, "entries", id)); toast("Buchung entfernt"); }
+  catch (e) { toast(msg(e), null, true); }
+}
+
+async function settle(uid) {
+  const list = S.open.filter(e => e.uid === uid);
+  if (!list.length) return;
+  const name = S.users.find(u => u.id === uid)?.name || list[0].userName;
+  if (!(await ask(`${name}: ${qty(list)} Getränke über ${fmt(total(list))} als bezahlt abrechnen?`, "Abrechnen"))) return;
+  try {
+    for (let i = 0; i < list.length; i += 400) {
+      const b = writeBatch(db);
+      list.slice(i, i + 400).forEach(e => b.update(doc(db, "entries", e.id), { settled: true, settledAt: serverTimestamp(), settledBy: S.me.id }));
+      await b.commit();
+    }
+    toast(`${name} abgerechnet: ${fmt(total(list))}`);
+  } catch (e) { toast(msg(e), null, true); }
+}
+
+async function exportCsv() {
+  try {
+    const rows = mapDocs(await getDocs(collection(db, "entries"))).sort(byTsDesc);
+    const c = v => (v / 100).toFixed(2).replace(".", ",");
+    const lines = [["Datum", "Person", "Getränk", "Menge", "Einzelpreis", "Summe", "Status"]]
+      .concat(rows.map(e => [fdate(e), e.userName, e.drinkName, e.qty, c(e.price), c(e.price * e.qty), e.settled ? "abgerechnet" : "offen"]));
+    const csv = "\ufeff" + lines.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(";")).join("\r\n");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    a.download = `getraenkeliste-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  } catch (e) { toast(msg(e), null, true); }
+}
+
+document.addEventListener("click", async ev => {
+  const b = ev.target.closest("[data-act]");
+  if (!b || b.disabled) return;
+  const { act, id, v } = b.dataset;
+  try {
+    switch (act) {
+      case "nav": S.view = v; render(true); window.scrollTo(0, 0); break;
+      case "aview": S.aview = v; render(true); break;
+      case "goto": S.view = "admin"; S.aview = v; render(true); break;
+      case "logout": await signOut(auth); break;
+      case "pick": pick(id, 1); break;
+      case "unpick": pick(id, -1); break;
+      case "recent": S.recentOpen = !S.recentOpen; render(true); break;
+      case "clearcart": S.cart = {}; render(true); break;
+      case "checkout": checkout(); break;
+      case "undo": undo(id); break;
+      case "sel": S.sel = S.sel === id ? null : id; render(true); break;
+      case "settle": settle(id); break;
+      case "csv": exportCsv(); break;
+      case "delentry":
+        if (await ask("Diese Buchung löschen?", "Löschen", true)) { await deleteDoc(doc(db, "entries", id)); toast("Buchung gelöscht"); }
+        break;
+      case "rename": {
+        const u = S.users.find(x => x.id === id);
+        const n = await askText("Neuer Anzeigename", u.name, "Umbenennen");
+        if (n && n.trim() && n.trim() !== u.name) { await updateDoc(doc(db, "users", id), { name: n.trim().slice(0, 30) }); toast("Umbenannt"); }
+        break;
+      }
+      case "role": {
+        const u = S.users.find(x => x.id === id);
+        const to = u.role === "admin" ? "user" : "admin";
+        if (await ask(to === "admin" ? `${u.name} zum Admin machen?` : `${u.name} die Admin-Rechte entziehen?`, "Rolle ändern")) {
+          await updateDoc(doc(db, "users", id), { role: to }); toast("Rolle geändert");
+        }
+        break;
+      }
+      case "active": {
+        const u = S.users.find(x => x.id === id);
+        if (!u.active || await ask(`${u.name} deaktivieren? Die Person kann sich dann nicht mehr anmelden. Offene Beträge bleiben erhalten.`, "Deaktivieren", true)) {
+          await updateDoc(doc(db, "users", id), { active: !u.active }); toast(u.active ? "Deaktiviert" : "Aktiviert");
+        }
+        break;
+      }
+    }
+  } catch (e) { toast(msg(e), null, true); }
+});
+
+document.addEventListener("change", e => {
+  if (e.target.name === "color") {
+    const p = e.target.closest("form")?.querySelector(".drink-prev .disc");
+    if (p) { p.style.background = e.target.value; p.style.color = textOn(e.target.value); }
+  }
+});
+
+document.addEventListener("submit", async ev => {
+  const f = ev.target.closest("form[data-form]");
+  if (!f) return;
+  ev.preventDefault();
+  const fd = Object.fromEntries(new FormData(f));
+  const errEl = f.querySelector(".err");
+  const setErr = t => { if (errEl) errEl.textContent = t; };
+  const btn = f.querySelector("button:not([type=button])");
+  setErr("");
+  if (btn) btn.disabled = true;
+  try {
+    switch (f.dataset.form) {
+      case "login": {
+        if (!slug(fd.name)) throw { message: "Bitte einen gültigen Namen eingeben." };
+        await signInWithEmailAndPassword(auth, toEmail(fd.name), fd.pw);
+        break;
+      }
+      case "setup": {
+        const name = fd.name.trim();
+        if (!slug(name)) throw { message: "Bitte einen gültigen Namen eingeben." };
+        if (fd.pw !== fd.pw2) throw { message: "Die Passwörter stimmen nicht überein." };
+        S.settingUp = true;
+        let cred;
+        try {
+          cred = await createUserWithEmailAndPassword(auth, toEmail(name), fd.pw);
+          const b = writeBatch(db);
+          b.set(doc(db, "users", cred.user.uid), { name, login: slug(name), role: "admin", active: true, createdAt: serverTimestamp() });
+          b.set(doc(db, "meta", "setup"), { by: cred.user.uid, at: serverTimestamp() });
+          await b.commit();
+        } catch (e) {
+          if (cred) { try { await cred.user.delete(); } catch {} }
+          S.settingUp = false;
+          throw e;
+        }
+        S.settingUp = false;
+        S.needSetup = false;
+        await startSession(cred.user);
+        break;
+      }
+      case "pw": {
+        if (fd.nw !== fd.nw2) throw { message: "Die neuen Passwörter stimmen nicht überein." };
+        await reauthenticateWithCredential(S.user, EmailAuthProvider.credential(S.user.email, fd.cur));
+        await updatePassword(S.user, fd.nw);
+        f.reset();
+        toast("Passwort geändert");
+        break;
+      }
+      case "drink": {
+        const price = parseCents(fd.price);
+        if (price === null) throw { message: "Preis ungültig. Beispiel: 2,50" };
+        const data = { name: fd.name.trim(), price, color: safeColor(fd.color), order: Number(fd.order) || 0, message: String(fd.message || "").trim().slice(0, 160) };
+        if (!data.name) throw { message: "Bitte einen Namen eingeben." };
+        data.logoFill = fd.logofill === "on";
+        if (fd.logofile && fd.logofile.size) data.logo = await readLogo(fd.logofile);
+        else if (fd.logoclear === "on") data.logo = "";
+        else if (!f.dataset.id) data.logo = "";
+        if (f.dataset.id) {
+          data.active = fd.active === "on";
+          await updateDoc(doc(db, "drinks", f.dataset.id), data);
+          toast(`${data.name} gespeichert`);
+        } else {
+          data.active = true;
+          await addDoc(collection(db, "drinks"), data);
+          toast(`${data.name} angelegt`);
+        }
+        render(true);
+        break;
+      }
+      case "adminbook": {
+        const u = S.users.find(x => x.id === fd.uid), d = S.drinks.find(x => x.id === fd.drink);
+        const q = Math.max(1, Math.min(50, parseInt(fd.qty, 10) || 1));
+        if (!u || !d) throw { message: "Person oder Getränk fehlt." };
+        await addDoc(collection(db, "entries"), {
+          uid: u.id, userName: u.name, drinkId: d.id, drinkName: d.name, price: d.price,
+          qty: q, ts: serverTimestamp(), settled: false, by: S.me.id
+        });
+        toast(`${q}× ${d.name} für ${u.name} gebucht`);
+        break;
+      }
+      case "newuser": {
+        const name = fd.name.trim();
+        if (!slug(name)) throw { message: "Bitte einen gültigen Namen eingeben." };
+        const sa = getSecondaryAuth();
+        const cred = await createUserWithEmailAndPassword(sa, toEmail(name), fd.pw);
+        try {
+          await setDoc(doc(db, "users", cred.user.uid), {
+            name, login: slug(name), role: fd.role === "admin" ? "admin" : "user", active: true, createdAt: serverTimestamp()
+          });
+        } catch (e) { try { await cred.user.delete(); } catch {} throw e; }
+        await signOut(sa);
+        toast(`${name} angelegt. Login-Name: ${slug(name)}`);
+        render(true);
+        break;
+      }
+    }
+  } catch (e) {
+    setErr(msg(e));
+  } finally {
+    if (btn && btn.isConnected) btn.disabled = false;
+  }
+});
+
+/* ---------- Start ---------- */
+if (CONFIGURED) {
+  app = initializeApp(firebaseConfig);
+  auth = getAuth(app);
+  db = getFirestore(app);
+  onAuthStateChanged(auth, async u => {
+    if (S.settingUp) return;
+    if (!u) {
+      teardown();
+      S.user = null;
+      try { S.needSetup = !(await getDoc(doc(db, "meta", "setup"))).exists(); } catch { S.needSetup = false; }
+      S.ready = true;
+      render(true);
+      return;
+    }
+    await startSession(u);
+  });
+} else {
+  S.ready = true;
+  render(true);
+}
+</script>
+</body>
+</html>
