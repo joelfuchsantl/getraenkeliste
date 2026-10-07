@@ -197,6 +197,22 @@ body:has(.cart) .toast{bottom:calc(110px + env(safe-area-inset-bottom,0px))}
 .done .acts{margin-top:auto;align-self:stretch;flex-direction:column;gap:10px}
 .done .acts .btn.primary{min-height:56px;font-size:18px;border-radius:16px;background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 .done .acts .btn{min-height:48px;border-radius:16px}
+.done-discs .disc:first-child{--r:-4deg}
+.done-discs .disc+.disc{--r:4deg}
+.done-discs .disc{animation:drop .7s cubic-bezier(.2,1.5,.4,1) both;animation-delay:calc(var(--i,0) * 110ms)}
+@keyframes drop{0%{opacity:0;transform:translateY(-140px) rotate(calc(var(--r,0deg) - 25deg)) scale(.8)}
+  55%{opacity:1;transform:translateY(10px) rotate(var(--r,0deg)) scale(1.04)}100%{opacity:1;transform:translateY(0) rotate(var(--r,0deg))}}
+.ask .done-head{animation:pop .5s cubic-bezier(.2,1.6,.4,1) .3s both}
+.ask .done-sub{animation:rise-in .45s ease-out .5s both}
+.ask .done-sum{animation:rise-in .45s ease-out .62s both}
+@keyframes pop{0%{opacity:0;transform:scale(.5)}100%{opacity:1;transform:none}}
+@keyframes rise-in{0%{opacity:0;transform:translateY(14px)}100%{opacity:1;transform:none}}
+.fizz{position:fixed;inset:0;pointer-events:none;z-index:25;overflow:hidden}
+.fizz i{position:absolute;bottom:-30px;border-radius:50%;border:2px solid rgba(255,255,255,.6);background:rgba(255,255,255,.08);
+  animation:bubble var(--d) cubic-bezier(.4,0,.8,.6) var(--w) both}
+@keyframes bubble{0%{opacity:0;transform:translate(0,0) scale(.6)}10%{opacity:.95}
+  50%{transform:translate(var(--x),-55vh) scale(1)}100%{opacity:0;transform:translate(calc(var(--x) * -.6),-112vh) scale(1.15)}}
+.sound-row{display:flex;align-items:center;justify-content:space-between;gap:12px;max-width:360px;padding:12px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
 
 @media (max-width:520px){
   .rows .t{min-width:0;flex-basis:100%}
@@ -204,6 +220,8 @@ body:has(.cart) .toast{bottom:calc(110px + env(safe-area-inset-bottom,0px))}
 }
 @media (prefers-reduced-motion:reduce){
   .disc,.toast,.disc.multi img{transition:none}
+  .done-discs .disc,.ask .done-head,.ask .done-sub,.ask .done-sum{animation:none}
+  .fizz{display:none}
   .pbtn:active .disc{transform:none}
 }
 </style>
@@ -230,7 +248,7 @@ const LOGIN_DOMAIN = "getraenkeliste.app";
 // Wie lange eine eigene Buchung rückgängig gemacht werden kann (muss zu firestore.rules passen)
 const UNDO_MINUTES = 5;
 // Versionsnummer, wird unter Konto angezeigt
-const APP_VERSION = "1.5";
+const APP_VERSION = "1.6";
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, initializeAuth, inMemoryPersistence, onAuthStateChanged, signInWithEmailAndPassword,
@@ -460,6 +478,50 @@ const askText = (label, value, ok = "OK") => dialog(`<label>${esc(label)}<input 
   <button type="button" class="btn" data-x>Abbrechen</button>
   <button type="submit" class="btn primary">${esc(ok)}</button></div>`, "input");
 
+/* ---------- Buchungs-Effekt: Sound und Bläschen ---------- */
+// Ton wird mit der Web-Audio-Schnittstelle erzeugt, es braucht keine Sounddateien
+const soundOn = () => { try { return localStorage.getItem("gl_sound") !== "off"; } catch { return true; } };
+let actx = null;
+function unlockAudio() {          // muss direkt beim Tippen passieren, sonst blockiert das Handy den Ton
+  if (!soundOn()) return;
+  try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); if (actx.state === "suspended") actx.resume(); } catch {}
+}
+function playFizz() {
+  if (!soundOn() || !actx) return;
+  try {
+    const t = actx.currentTime + 0.02, out = actx.createGain(); out.gain.value = 0.55; out.connect(actx.destination);
+    const noise = dur => { const b = actx.createBuffer(1, Math.ceil(actx.sampleRate * dur), actx.sampleRate), d = b.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; const s = actx.createBufferSource(); s.buffer = b; return s; };
+    // 1) Klick der Lasche
+    const c = noise(0.04), cf = actx.createBiquadFilter(), cg = actx.createGain();
+    cf.type = "bandpass"; cf.frequency.value = 2200; cf.Q.value = 1.2;
+    cg.gain.setValueAtTime(0.9, t); cg.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+    c.connect(cf).connect(cg).connect(out); c.start(t);
+    // 2) Zischen der Kohlensäure
+    const h = noise(1.1), hf = actx.createBiquadFilter(), hg = actx.createGain();
+    hf.type = "highpass"; hf.frequency.setValueAtTime(3500, t + 0.03); hf.frequency.exponentialRampToValueAtTime(6500, t + 1.0);
+    hg.gain.setValueAtTime(0.0001, t + 0.03); hg.gain.exponentialRampToValueAtTime(0.45, t + 0.07); hg.gain.exponentialRampToValueAtTime(0.001, t + 1.05);
+    h.connect(hf).connect(hg).connect(out); h.start(t + 0.03);
+    // 3) Kurzes Glas-Ding
+    [[1046.5, 0], [1568, 0.09]].forEach(([f, dt]) => {
+      const o = actx.createOscillator(), g = actx.createGain(); o.type = "sine"; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t + 0.35 + dt); g.gain.exponentialRampToValueAtTime(0.28, t + 0.37 + dt); g.gain.exponentialRampToValueAtTime(0.001, t + 1.2 + dt);
+      o.connect(g).connect(out); o.start(t + 0.35 + dt); o.stop(t + 1.3 + dt);
+    });
+  } catch {}
+}
+function burstBubbles() {
+  if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+  const box = document.createElement("div"); box.className = "fizz"; box.setAttribute("aria-hidden", "true");
+  let html = "";
+  for (let i = 0; i < 34; i++) {
+    const size = 6 + Math.random() * 18;
+    html += `<i style="left:${(Math.random() * 100).toFixed(1)}%;width:${size.toFixed(0)}px;height:${size.toFixed(0)}px;--x:${(Math.random() * 60 - 30).toFixed(0)}px;--d:${(1.6 + Math.random() * 1.6).toFixed(2)}s;--w:${(Math.random() * 0.7).toFixed(2)}s"></i>`;
+  }
+  box.innerHTML = html; document.body.appendChild(box);
+  setTimeout(() => box.remove(), 4200);
+}
+
 /* ---------- Zustand ---------- */
 const S = {
   ready: false, user: null, me: null, needSetup: false, blocked: false, settingUp: false,
@@ -642,6 +704,9 @@ function viewAccount() {
       <button class="btn primary">Passwort ändern</button>
       <p class="err"></p>
     </form>
+    <h2 class="h">Effekte</h2>
+    <div class="sound-row"><span>Sound beim Buchen <span class="muted">(auf diesem Gerät)</span></span>
+      <button class="btn small" data-act="sound">${soundOn() ? "Ein" : "Aus"}</button></div>
     <p class="muted" style="margin-top:40px">Getränkeliste Version ${APP_VERSION}</p>`;
 }
 
@@ -834,6 +899,7 @@ async function checkout() {
 }
 // Bestätigung mit dem beim Produkt hinterlegten Text; {Name} wird durch den Namen ersetzt
 async function showBooked(items, ids, sum) {
+  playFizz(); burstBubbles(); navigator.vibrate?.([30, 40, 30]);
   const texts = [...new Set(items.map(i => String(i.d.message || "").trim()).filter(Boolean))]
     .map(t => t.replace(/\{name\}/gi, S.me.name.split(" ")[0]));
   const what = items.map(i => `${i.n}× ${i.d.name}`).join(", ");
@@ -843,7 +909,7 @@ async function showBooked(items, ids, sum) {
   }
   // erster Satz groß, der Rest als Hinweis darunter
   const parts = texts.map(t => { const m = t.match(/^(.+?[.!?])\s+(.+)$/s); return m ? [m[1], m[2]] : [t, ""]; });
-  const r = await dialog(`<div class="done-discs" data-done>${items.slice(0, 3).map(i => disc(i.d)).join("")}</div>
+  const r = await dialog(`<div class="done-discs" data-done>${items.slice(0, 3).map((i, k) => disc(i.d).replace('style="background:', `style="--i:${k};background:`)).join("")}</div>
     ${parts.map(([h, sub]) => `<p class="done-head">${esc(h)}</p>${sub ? `<p class="done-sub">${esc(sub)}</p>` : ""}`).join("")}
     <p class="done-sum">${esc(what)} gebucht, ${fmt(sum)}${myBalance() > 0 ? `<br>Restguthaben: ${fmt(myBalance())}` : ""}</p>
     <div class="acts"><button type="submit" class="btn primary">Fertig</button>
@@ -938,7 +1004,13 @@ document.addEventListener("click", async ev => {
       case "unpick": pick(id, -1); break;
       case "recent": S.recentOpen = !S.recentOpen; render(true); break;
       case "clearcart": S.cart = {}; render(true); break;
-      case "checkout": checkout(); break;
+      case "checkout": unlockAudio(); checkout(); break;
+      case "sound": {
+        try { localStorage.setItem("gl_sound", soundOn() ? "off" : "on"); } catch {}
+        render(true);
+        if (soundOn()) { unlockAudio(); playFizz(); }
+        break;
+      }
       case "undo": undo(id); break;
       case "sel": S.sel = S.sel === id ? null : id; render(true); break;
       case "settle": settle(id); break;
