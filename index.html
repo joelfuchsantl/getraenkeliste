@@ -248,7 +248,7 @@ const LOGIN_DOMAIN = "getraenkeliste.app";
 // Wie lange eine eigene Buchung rückgängig gemacht werden kann (muss zu firestore.rules passen)
 const UNDO_MINUTES = 5;
 // Versionsnummer, wird unter Konto angezeigt
-const APP_VERSION = "1.6";
+const APP_VERSION = "1.6.1";
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, initializeAuth, inMemoryPersistence, onAuthStateChanged, signInWithEmailAndPassword,
@@ -435,7 +435,7 @@ function msg(e) {
     "auth/too-many-requests": "Zu viele Versuche. Kurz warten und nochmal probieren.",
     "auth/network-request-failed": "Keine Verbindung zum Server.",
     "auth/requires-recent-login": "Bitte ab- und wieder anmelden, dann nochmal versuchen.",
-    "permission-denied": "Nicht erlaubt. Zeitfenster abgelaufen oder Konto nicht aktiv.",
+    "permission-denied": isAdmin() ? "Nicht erlaubt. Bitte prüfen, ob in Firebase die aktuellen Firestore-Regeln veröffentlicht sind." : "Nicht erlaubt. Zeitfenster abgelaufen oder Konto nicht aktiv.",
     "unavailable": "Keine Verbindung zum Server."
   })[c] || e?.message || "Unbekannter Fehler.";
 }
@@ -960,13 +960,16 @@ async function settle(uid) {
   if (!(await ask(q, "Abrechnen"))) return;
   try {
     const ops = [...list.map(e => ["entries", e.id]), ...deps.map(x => ["deposits", x.id])];
-    for (let i = 0; i < ops.length || i === 0; i += 400) {
+    for (let i = 0; i < ops.length; i += 400) {
       const bt = writeBatch(db);
       ops.slice(i, i + 400).forEach(([c, id]) => bt.update(doc(db, c, id), { settled: true, settledAt: serverTimestamp(), settledBy: S.me.id }));
-      if (i + 400 >= ops.length) bt.set(doc(collection(db, "deposits")), { uid, userName: name, amount: -b, note: "", kind: "cash",
-        settled: true, ts: serverTimestamp(), by: S.me.id, settledAt: serverTimestamp(), settledBy: S.me.id });
       await bt.commit();
     }
+    // Barzahlung nur für den Verlauf festhalten; klappt das nicht (z. B. alte Firestore-Regeln), bleibt die Abrechnung trotzdem gültig
+    try {
+      await addDoc(collection(db, "deposits"), { uid, userName: name, amount: -b, note: "", kind: "cash",
+        settled: true, ts: serverTimestamp(), by: S.me.id, settledAt: serverTimestamp(), settledBy: S.me.id });
+    } catch (e) { console.warn("Barzahlung nicht im Verlauf gespeichert:", e?.code || e); }
     toast(`${name} abgerechnet: ${fmt(-b)} bar`);
   } catch (e) { toast(msg(e), null, true); }
 }
