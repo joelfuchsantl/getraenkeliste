@@ -248,7 +248,7 @@ const LOGIN_DOMAIN = "getraenkeliste.app";
 // Wie lange eine eigene Buchung rückgängig gemacht werden kann (muss zu firestore.rules passen)
 const UNDO_MINUTES = 5;
 // Versionsnummer, wird unter Konto angezeigt
-const APP_VERSION = "1.6.1";
+const APP_VERSION = "1.6.2";
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, initializeAuth, inMemoryPersistence, onAuthStateChanged, signInWithEmailAndPassword,
@@ -717,6 +717,10 @@ function viewAdmin() {
   return `<nav class="sub">${sub.map(([v, l]) => `<button data-act="aview" data-v="${v}" class="${S.aview === v ? "on" : ""}">${l}</button>`).join("")}</nav>${body}`;
 }
 
+function depWarn() {
+  return S.depBlocked ? `<p class="empty" style="text-align:left;margin-bottom:18px"><b>Guthaben kann nicht gelesen werden.</b><br>
+    In Firebase unter Firestore → Regeln die aktuellen Regeln aus <b>firestore.rules</b> (GitHub-Repo) einfügen und veröffentlichen. Die App versucht es danach automatisch erneut.</p>` : "";
+}
 function aOverview() {
   const by = new Map();
   const row = (uid, name) => { if (!by.has(uid)) by.set(uid, { uid, name, list: [], deps: [] }); return by.get(uid); };
@@ -727,7 +731,7 @@ function aOverview() {
     .sort((a, b) => a.b - b.b || a.name.localeCompare(b.name, "de"));
   const owed = rows.reduce((a, r) => a + Math.max(0, -r.b), 0), credit = rows.reduce((a, r) => a + Math.max(0, r.b), 0);
   const people = rows.filter(r => r.b < 0).length;
-  return `<section class="balance"><div>
+  return `${depWarn()}<section class="balance"><div>
       <span class="label">Offen gesamt</span>
       <strong>${fmt(owed)}</strong>
       <span class="muted">bei ${people} ${people === 1 ? "Person" : "Personen"}${credit ? ` · Guthaben gesamt + ${fmt(credit)}` : ""}</span>
@@ -843,10 +847,22 @@ async function startSession(u) {
     S.mine = mapDocs(s).sort(byTsDesc); render();
   }, onErr));
   // Einzahlungen; Fehler hier (z. B. Regeln noch nicht aktualisiert) sollen den Rest nicht stören
-  const depErr = e => console.warn("Einzahlungen nicht lesbar:", e?.code || e);
-  unsubs.push(onSnapshot(query(collection(db, "deposits"), where("uid", "==", u.uid)), s => {
-    S.myDeps = mapDocs(s).sort(byTsDesc); render();
-  }, depErr));
+  // Einzahlungen: schlägt das Lesen fehl (z. B. Regeln noch alt), wird es alle 15 s neu versucht,
+  // damit das Guthaben ohne Neuladen erscheint, sobald die Regeln passen
+  const session = u.uid;
+  const live = (makeQuery, onData) => {
+    let un = null, timer = null, stopped = false;
+    const start = () => {
+      un = onSnapshot(makeQuery(), s => { S.depBlocked = false; onData(s); render(); }, e => {
+        console.warn("Einzahlungen nicht lesbar:", e?.code || e);
+        S.depBlocked = true; render();
+        if (!stopped && S.user?.uid === session) timer = setTimeout(start, 15000);
+      });
+    };
+    start();
+    unsubs.push(() => { stopped = true; clearTimeout(timer); try { un?.(); } catch {} });
+  };
+  live(() => query(collection(db, "deposits"), where("uid", "==", u.uid)), s => { S.myDeps = mapDocs(s).sort(byTsDesc); });
   if (S.me.role === "admin") {
     unsubs.push(onSnapshot(collection(db, "users"), s => {
       S.users = mapDocs(s).sort((a, b) => a.name.localeCompare(b.name, "de")); render();
@@ -854,9 +870,7 @@ async function startSession(u) {
     unsubs.push(onSnapshot(query(collection(db, "entries"), where("settled", "==", false)), s => {
       S.open = mapDocs(s).sort(byTsDesc); render();
     }, onErr));
-    unsubs.push(onSnapshot(query(collection(db, "deposits"), where("settled", "==", false)), s => {
-      S.openDeps = mapDocs(s).sort(byTsDesc); render();
-    }, depErr));
+    live(() => query(collection(db, "deposits"), where("settled", "==", false)), s => { S.openDeps = mapDocs(s).sort(byTsDesc); });
     unsubs.push(onSnapshot(query(collection(db, "entries"), orderBy("ts", "desc"), limit(300)), s => {
       S.recent = mapDocs(s); render();
     }, onErr));
@@ -944,6 +958,7 @@ async function deposit(uid) {
     await addDoc(collection(db, "deposits"), { uid, userName: name, amount, note: String(v.note || "").trim().slice(0, 60), kind: "deposit",
       settled: false, ts: serverTimestamp(), by: S.me.id });
     toast(`${fmt(amount)} Guthaben für ${name} eingetragen`);
+    if (S.depBlocked) toast("Gespeichert, wird aber noch nicht angezeigt: Bitte die Firestore-Regeln aktualisieren.", null, true);
   } catch (e) { toast(msg(e), null, true); }
 }
 
