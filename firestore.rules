@@ -1,0 +1,89 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn()    { return request.auth != null; }
+    function profilePath() { return /databases/$(database)/documents/users/$(request.auth.uid); }
+    function setupPath()   { return /databases/$(database)/documents/meta/setup; }
+    function hasProfile()  { return signedIn() && exists(profilePath()); }
+    function profile()     { return get(profilePath()).data; }
+    function isActive()    { return hasProfile() && profile().active == true; }
+    function isAdmin()     { return isActive() && profile().role == 'admin'; }
+
+    // Merker, ob die Ersteinrichtung (erster Admin) schon erfolgt ist
+    match /meta/setup {
+      allow read: if true;
+      allow create: if signedIn()
+        && !exists(setupPath())
+        && getAfter(profilePath()).data.role == 'admin';
+      allow update, delete: if false;
+    }
+
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+      // Admin legt Benutzer an; einmalig darf sich der erste Admin selbst anlegen
+      allow create: if isAdmin() || (
+        signedIn() && request.auth.uid == uid
+        && request.resource.data.role == 'admin'
+        && request.resource.data.active == true
+        && !exists(setupPath())
+        && existsAfter(setupPath())
+      );
+      allow update, delete: if isAdmin();
+    }
+
+    // Getränke inkl. Logo (als kleines Bild direkt im Dokument): lesen alle, ändern nur Admin
+    match /drinks/{id} {
+      allow read: if isActive();
+      allow write: if isAdmin()
+        && request.resource.data.name is string
+        && request.resource.data.price is int
+        && request.resource.data.price >= 0;
+    }
+
+    // Einzahlungen (Guthaben): jeder sieht die eigenen, nur der Admin trägt ein, verrechnet oder löscht
+    match /deposits/{id} {
+      allow read: if isAdmin() || (isActive() && resource.data.uid == request.auth.uid);
+      allow create, update: if isAdmin()
+        && request.resource.data.uid is string
+        && request.resource.data.amount is int
+        && request.resource.data.amount > 0;
+      allow delete: if isAdmin();
+    }
+
+    match /entries/{id} {
+      function drink() {
+        return get(/databases/$(database)/documents/drinks/$(request.resource.data.drinkId)).data;
+      }
+      allow read: if isAdmin() || (isActive() && resource.data.uid == request.auth.uid);
+
+      // Normale Benutzer: nur für sich selbst, 1 bis 20 Stück, Preis muss dem aktuellen Getränkepreis entsprechen
+      allow create: if isAdmin() || (
+        isActive()
+        && request.resource.data.keys().hasOnly(['uid','userName','drinkId','drinkName','price','qty','ts','settled','by'])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.by == request.auth.uid
+        && request.resource.data.userName == profile().name
+        && request.resource.data.qty is int
+        && request.resource.data.qty >= 1
+        && request.resource.data.qty <= 20
+        && request.resource.data.settled == false
+        && request.resource.data.ts == request.time
+        && drink().active == true
+        && request.resource.data.price == drink().price
+        && request.resource.data.drinkName == drink().name
+      );
+
+      // Abrechnen und Korrekturen nur durch Admin
+      allow update: if isAdmin();
+
+      // Eigene, offene Buchung innerhalb von 5 Minuten zurücknehmen
+      allow delete: if isAdmin() || (
+        isActive()
+        && resource.data.uid == request.auth.uid
+        && resource.data.settled == false
+        && request.time < resource.data.ts + duration.value(5, 'm')
+      );
+    }
+  }
+}

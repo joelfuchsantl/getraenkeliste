@@ -46,6 +46,7 @@ a{color:var(--ink)}
 /* Kontostand */
 .balance{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;padding-bottom:18px;border-bottom:1px solid var(--line)}
 .balance>div{display:flex;flex-direction:column}
+.balance strong.plus{color:#7BE0A0}
 .balance strong{color:#F2F2F2;font:800 clamp(48px,13vw,80px)/1 var(--display);font-variant-numeric:tabular-nums;margin-top:2px}
 .balance .cnt{color:var(--muted);font-size:15px;padding-bottom:8px;white-space:nowrap}
 
@@ -57,6 +58,13 @@ a{color:var(--ink)}
 .disc img{width:70%;height:76%;object-fit:contain}
 .disc.fill img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:inherit}
 .disc .init{font:800 64px/1 var(--display);color:inherit;opacity:.92}
+/* Mehrere Logos: wechseln im Kreis mit Überblendung */
+.disc.multi{overflow:hidden}
+.disc.multi img{position:absolute;opacity:0;transform:scale(.92);transition:opacity .7s ease,transform .7s ease}
+.disc.multi:not(.fill) img{inset:12% 15%;width:70%;height:76%}
+.disc.multi img.on{opacity:1;transform:none}
+.prod.sel .disc.multi{overflow:visible}
+.disc.multi .qty{z-index:2}
 .pbtn:active .disc{transform:scale(.96)}
 .prod.sel .disc{box-shadow:0 0 0 4px var(--bg),0 0 0 7px var(--accent)}
 .qty{position:absolute;top:-12px;right:-10px;z-index:1;min-width:42px;height:42px;padding:0 9px;border-radius:21px;background:var(--accent);color:var(--accent-ink);
@@ -116,6 +124,12 @@ input:focus,select:focus{border-color:var(--accent-text);outline:none;box-shadow
 .drink .fname{flex:1 1 170px}
 .drink .fprice,.drink .forder{width:110px}
 .drink .fmsg,.drink .flogo{flex-basis:100%}
+.logos{display:flex;flex-wrap:wrap;gap:10px;flex-basis:100%}
+.logos label{flex-direction:column;align-items:center;gap:4px;font-size:13px}
+.logos img{width:80px;height:40px;object-fit:cover;border-radius:8px;background:var(--surface);border:1px solid var(--line)}
+.logos label:has(input:checked) img{opacity:.3}
+.rows .m.plus{color:#7BE0A0}
+.dep .d{font-weight:600}
 .drink .fmsg small{font-weight:400}
 .swatches{border:0;padding:0;margin:0;display:flex;gap:10px;flex-wrap:wrap;flex-basis:100%}
 .swatches legend{font-size:14px;color:var(--muted);font-weight:500;margin-bottom:6px;padding:0}
@@ -182,7 +196,7 @@ body:has(.cart) .toast{bottom:calc(110px + env(safe-area-inset-bottom,0px))}
   .rows .s{min-width:0}
 }
 @media (prefers-reduced-motion:reduce){
-  .disc,.toast{transition:none}
+  .disc,.toast,.disc.multi img{transition:none}
   .pbtn:active .disc{transform:none}
 }
 </style>
@@ -208,6 +222,8 @@ const firebaseConfig = {
 const LOGIN_DOMAIN = "getraenkeliste.app";
 // Wie lange eine eigene Buchung rückgängig gemacht werden kann (muss zu firestore.rules passen)
 const UNDO_MINUTES = 5;
+// Versionsnummer, wird unter Konto angezeigt
+const APP_VERSION = "1.1";
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, initializeAuth, inMemoryPersistence, onAuthStateChanged, signInWithEmailAndPassword,
@@ -265,8 +281,23 @@ const safeLogo = v => /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/=]+$/.tes
 const initials = n => String(n).split(/\s+/).filter(w => /[A-Za-zÄÖÜäöü0-9]/.test(w)).slice(0, 2).map(w => w[0].toUpperCase()).join("");
 const textOn = c => { const h = safeColor(c), r = parseInt(h.slice(1, 3), 16), g = parseInt(h.slice(3, 5), 16), b = parseInt(h.slice(5, 7), 16);
   return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? "#111111" : "#FFFFFF"; };
-const disc = (d, extra = "") => `<span class="disc${d.logoFill && safeLogo(d.logo) ? " fill" : ""}" style="background:${safeColor(d.color)};color:${textOn(d.color)}">${safeLogo(d.logo)
-  ? `<img src="${esc(d.logo)}" alt="">` : `<span class="init" aria-hidden="true">${esc(initials(d.name))}</span>`}${extra}</span>`;
+// Alle Logos eines Getränks (neu: Liste "logos", alt: einzelnes "logo")
+const logosOf = d => (Array.isArray(d.logos) && d.logos.length ? d.logos : [d.logo]).map(safeLogo).filter(Boolean);
+let logoTick = 0;
+const disc = (d, extra = "") => {
+  const L = logosOf(d), multi = L.length > 1, on = logoTick % (L.length || 1);
+  return `<span class="disc${d.logoFill && L.length ? " fill" : ""}${multi ? " multi" : ""}" ${multi ? `data-n="${L.length}"` : ""} style="background:${safeColor(d.color)};color:${textOn(d.color)}">${L.length
+    ? L.map((src, i) => `<img src="${esc(src)}" alt=""${multi && i === on ? ' class="on"' : ""}>`).join("")
+    : `<span class="init" aria-hidden="true">${esc(initials(d.name))}</span>`}${extra}</span>`;
+};
+// Logo-Wechsel alle 2,6 s, ohne die Seite neu aufzubauen
+setInterval(() => {
+  logoTick++;
+  document.querySelectorAll(".disc.multi").forEach(el => {
+    const n = +el.dataset.n || 1, imgs = el.querySelectorAll("img");
+    imgs.forEach((im, i) => im.classList.toggle("on", i === logoTick % n));
+  });
+}, 2600);
 // Logo-Datei verkleinern (max. 256 px) und als PNG-Daten speichern, passt so ins Getränke-Dokument
 function readLogo(file) {
   return new Promise((res, rej) => {
@@ -276,12 +307,13 @@ function readLogo(file) {
       const img = new Image();
       img.onerror = () => rej({ message: "Das ist kein gültiges Bild." });
       img.onload = () => {
-        const k = Math.min(1, 400 / Math.max(img.naturalWidth || 400, img.naturalHeight || 400));
+        const k = Math.min(1, 360 / Math.max(img.naturalWidth || 360, img.naturalHeight || 360));
         const c = document.createElement("canvas");
-        c.width = Math.max(1, Math.round((img.naturalWidth || 400) * k));
-        c.height = Math.max(1, Math.round((img.naturalHeight || 400) * k));
+        c.width = Math.max(1, Math.round((img.naturalWidth || 360) * k));
+        c.height = Math.max(1, Math.round((img.naturalHeight || 360) * k));
         c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-        res(c.toDataURL("image/png"));
+        const w = c.toDataURL("image/webp", 0.85);
+        res(w.startsWith("data:image/webp") ? w : c.toDataURL("image/png"));
       };
       img.src = r.result;
     };
@@ -334,7 +366,7 @@ function dialog(html, focusSel, autoCloseMs) {
     w.querySelectorAll("[data-x]").forEach(b => b.addEventListener("click", () => done(null)));
     w.querySelectorAll("[data-r]").forEach(b => b.addEventListener("click", () => done(b.dataset.r)));
     if (autoCloseMs) setTimeout(() => { if (w.isConnected) done(null); }, autoCloseMs);
-    f.addEventListener("submit", e => { e.preventDefault(); e.stopPropagation(); const i = f.querySelector("input"); done(i ? i.value : true); });
+    f.addEventListener("submit", e => { e.preventDefault(); e.stopPropagation(); const ins = f.querySelectorAll("input"); done(ins.length > 1 ? Object.fromEntries(new FormData(f)) : ins.length ? ins[0].value : true); });
     (f.querySelector(focusSel) || f.querySelector("button[type=submit]")).focus();
   });
 }
@@ -348,17 +380,26 @@ const askText = (label, value, ok = "OK") => dialog(`<label>${esc(label)}<input 
 /* ---------- Zustand ---------- */
 const S = {
   ready: false, user: null, me: null, needSetup: false, blocked: false, settingUp: false,
-  drinks: [], mine: [], users: [], open: [], recent: [],
+  drinks: [], mine: [], users: [], open: [], recent: [], myDeps: [], openDeps: [],
   view: "list", aview: "overview", sel: null, cart: {}, busy: false, pending: false
 };
 let app, auth, db, secAuth = null, unsubs = [];
 const isAdmin = () => S.me?.role === "admin";
+const depSum = l => l.reduce((a, x) => a + (x.amount || 0), 0);
+// Kontostand: offene Einzahlungen minus offene Buchungen (positiv = Guthaben, negativ = offen)
+const balanceOf = (entries, deps) => depSum(deps.filter(x => !x.settled)) - total(entries.filter(e => !e.settled));
+const myBalance = () => balanceOf(S.mine, S.myDeps);
+function balanceBlock(b, who) {
+  const plus = b > 0;
+  return `<span class="label">${who}${plus ? "dein Guthaben" : b < 0 ? "offen sind" : "alles bezahlt"}</span>
+      <strong class="${plus ? "plus" : ""}">${plus ? "+ " : ""}${fmt(Math.abs(b))}</strong>`;
+}
 const canUndo = e => !e.settled && e.uid === S.me?.id && (Date.now() - tsMs(e)) < UNDO_MINUTES * 60000 - 5000;
 
 function teardown() {
   unsubs.forEach(u => { try { u(); } catch {} });
   unsubs = [];
-  Object.assign(S, { me: null, drinks: [], mine: [], users: [], open: [], recent: [], blocked: false, sel: null, cart: {}, busy: false });
+  Object.assign(S, { me: null, drinks: [], mine: [], users: [], open: [], recent: [], myDeps: [], openDeps: [], blocked: false, sel: null, cart: {}, busy: false });
 }
 
 /* ---------- Rendern (verschoben, solange ein Eingabefeld aktiv ist) ---------- */
@@ -480,18 +521,28 @@ function viewList() {
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>
     </button>${S.recentOpen && S.mine.length > all.length ? `<button class="more" data-act="nav" data-v="history"><span>Ganzen Verlauf ansehen</span></button>` : ""}` : "";
   return `<section class="balance"><div>
-      <span class="label">Servus ${esc(S.me.name.split(" ")[0])}, offen sind</span>
-      <strong>${fmt(total(open))}</strong>
+      ${balanceBlock(myBalance(), `Servus ${esc(S.me.name.split(" ")[0])}, `)}
     </div><span class="cnt">${cnt} ${cnt === 1 ? "Getränk" : "Getränke"}</span></section>
     ${prods}
     <h2 class="h">Zuletzt gebucht</h2>
     ${recent.length ? rowsMine(recent) + more : '<p class="muted">Noch nichts gebucht.</p>'}`;
 }
 
+function rowsDeps(list, admin) {
+  return `<ul class="rows dep">${list.map(x => `<li>
+    <span class="t">${fdate(x)}</span>
+    <span class="d">${x.kind === "cash" ? "Bar bezahlt (Abrechnung)" : x.kind === "carry" ? "Restguthaben übertragen" : "Einzahlung"}${x.note ? ` <span class="muted">· ${esc(x.note)}</span>` : ""}</span>
+    <span class="m plus">+ ${fmt(x.amount)}</span>
+    <span class="s">${x.settled ? '<span class="tag">verrechnet</span>' : admin ? `<button class="btn small danger" data-act="deldep" data-id="${x.id}">Löschen</button>` : ""}</span>
+  </li>`).join("")}</ul>`;
+}
 function viewHistory() {
   const open = S.mine.filter(e => !e.settled);
   const done = S.mine.filter(e => e.settled).slice(0, 50);
-  return `<h2 class="h">Offen: ${fmt(total(open))}</h2>
+  const b = myBalance(), deps = S.myDeps.slice(0, 30);
+  return `<h2 class="h">${b > 0 ? `Guthaben: + ${fmt(b)}` : `Offen: ${fmt(-b)}`}</h2>
+    ${deps.length ? `<h2 class="h">Einzahlungen</h2>${rowsDeps(deps, false)}` : ""}
+    <h2 class="h">Getränke seit der letzten Abrechnung: ${fmt(total(open))}</h2>
     ${open.length ? rowsSummary(open) + `<h2 class="h">Einzelbuchungen offen</h2>` + rowsMine(open) : '<p class="muted">Alles abgerechnet.</p>'}
     <h2 class="h">Bereits abgerechnet</h2>
     ${done.length ? rowsMine(done) : '<p class="muted">Noch keine Abrechnung.</p>'}`;
@@ -507,7 +558,8 @@ function viewAccount() {
       <label>Neues Passwort wiederholen<input type="password" name="nw2" required minlength="6" autocomplete="new-password"></label>
       <button class="btn primary">Passwort ändern</button>
       <p class="err"></p>
-    </form>`;
+    </form>
+    <p class="muted" style="margin-top:40px">Getränkeliste Version ${APP_VERSION}</p>`;
 }
 
 /* ---------- Verwaltung ---------- */
@@ -519,17 +571,18 @@ function viewAdmin() {
 
 function aOverview() {
   const by = new Map();
-  S.open.forEach(e => { const r = by.get(e.uid) || { uid: e.uid, name: e.userName, list: [] }; r.list.push(e); by.set(e.uid, r); });
-  S.users.forEach(u => {
-    if (by.has(u.id)) by.get(u.id).name = u.name;
-    else if (u.active) by.set(u.id, { uid: u.id, name: u.name, list: [] });
-  });
-  const rows = [...by.values()].sort((a, b) => total(b.list) - total(a.list) || a.name.localeCompare(b.name, "de"));
-  const people = rows.filter(r => r.list.length).length;
+  const row = (uid, name) => { if (!by.has(uid)) by.set(uid, { uid, name, list: [], deps: [] }); return by.get(uid); };
+  S.open.forEach(e => row(e.uid, e.userName).list.push(e));
+  S.openDeps.forEach(x => row(x.uid, x.userName || "?").deps.push(x));
+  S.users.forEach(u => { if (by.has(u.id)) by.get(u.id).name = u.name; else if (u.active) row(u.id, u.name); });
+  const rows = [...by.values()].map(r => ({ ...r, b: depSum(r.deps) - total(r.list) }))
+    .sort((a, b) => a.b - b.b || a.name.localeCompare(b.name, "de"));
+  const owed = rows.reduce((a, r) => a + Math.max(0, -r.b), 0), credit = rows.reduce((a, r) => a + Math.max(0, r.b), 0);
+  const people = rows.filter(r => r.b < 0).length;
   return `<section class="balance"><div>
       <span class="label">Offen gesamt</span>
-      <strong>${fmt(total(S.open))}</strong>
-      <span class="muted">${qty(S.open)} Getränke bei ${people} ${people === 1 ? "Person" : "Personen"}</span>
+      <strong>${fmt(owed)}</strong>
+      <span class="muted">bei ${people} ${people === 1 ? "Person" : "Personen"}${credit ? ` · Guthaben gesamt + ${fmt(credit)}` : ""}</span>
     </div></section>
     <h2 class="h">Pro Person</h2>
     <ul class="rows people">${rows.map(r => {
@@ -537,15 +590,17 @@ function aOverview() {
       return `<li>
         <button class="link name" data-act="sel" data-id="${r.uid}" aria-expanded="${exp}">${esc(r.name)}</button>
         <span class="muted">${n}×</span>
-        <span class="m">${fmt(total(r.list))}</span>
-        <span class="s"><button class="btn small primary" data-act="settle" data-id="${r.uid}" ${n ? "" : "disabled"}>Abrechnen</button></span>
-        ${exp ? `<div class="detail">${n ? rowsSummary(r.list) + `<ul class="rows">${r.list.map(e => `<li>
+        <span class="m${r.b > 0 ? " plus" : ""}">${r.b > 0 ? "+ " : ""}${fmt(Math.abs(r.b))}</span>
+        <span class="s"><button class="btn small" data-act="deposit" data-id="${r.uid}" aria-label="Guthaben für ${esc(r.name)} einzahlen">+ Guthaben</button>
+          <button class="btn small primary" data-act="settle" data-id="${r.uid}" ${r.b < 0 ? "" : "disabled"}>Abrechnen</button></span>
+        ${exp ? `<div class="detail">${r.deps.length ? `<p class="label">Offene Einzahlungen</p>${rowsDeps(r.deps, true)}` : ""}${n ? `<p class="label">Getränke seit der letzten Abrechnung</p>` + rowsSummary(r.list) + `<ul class="rows">${r.list.map(e => `<li>
             <span class="t">${fdate(e)}</span><span class="d">${e.qty > 1 ? e.qty + "× " : ""}${esc(e.drinkName)}</span>
             <span class="m">${fmt(e.price * e.qty)}</span>
             <span class="s"><button class="btn small danger" data-act="delentry" data-id="${e.id}">Löschen</button></span></li>`).join("")}</ul>`
-          : '<p class="muted">Nichts offen.</p>'}</div>` : ""}
+          : r.deps.length ? "" : '<p class="muted">Nichts offen.</p>'}</div>` : ""}
       </li>`;
-    }).join("")}</ul>`;
+    }).join("")}</ul>
+    <p class="muted">„+ Guthaben“ trägt eine Einzahlung ein, z. B. wenn jemand 20 € in die Kasse legt. Getränke werden dann zuerst vom Guthaben abgezogen. „Abrechnen“ gibt es nur bei offenem Betrag: Die Person zahlt den Rest bar, danach steht sie auf 0.</p>`;
 }
 
 function aBook() {
@@ -575,9 +630,9 @@ function drinkForm(d) {
     <label class="fprice">Preis in €<input name="price" required inputmode="decimal" value="${d ? centsToInput(d.price) : ""}" placeholder="2,50"></label>
     <label class="forder">Reihenfolge<input type="number" name="order" value="${d?.order ?? S.drinks.length + 1}"></label>
     <label class="fmsg">Text nach dem Buchen <small>({Name} wird durch den Namen ersetzt)</small><input name="message" maxlength="160" value="${esc(d?.message || "")}" placeholder="z. B. Danke {Name}! Pfand bitte wieder zurückbringen."></label>
-    <label class="flogo">Logo (optional, PNG, JPG oder WebP)<input type="file" name="logofile" accept="image/png,image/jpeg,image/webp"></label>
+    ${d && logosOf(d).length ? `<div class="logos">${logosOf(d).map((src, i) => `<label><img src="${esc(src)}" alt="Logo ${i + 1}"><span><input type="checkbox" name="logodel" value="${i}"> entfernen</span></label>`).join("")}</div>` : ""}
+    <label class="flogo">${d && logosOf(d).length ? "Weitere Logos hinzufügen" : "Logo"} (optional, PNG, JPG oder WebP, mehrere möglich; ab 2 Logos wechseln sie automatisch)<input type="file" name="logofile" accept="image/png,image/jpeg,image/webp" multiple></label>
     <label class="check"><input type="checkbox" name="logofill" ${d?.logoFill ? "checked" : ""}> Logo füllt die ganze Kachel (gut für Logos mit eigenem Hintergrund)</label>
-    ${d && safeLogo(d.logo) ? `<label class="check"><input type="checkbox" name="logoclear"> Logo entfernen</label>` : ""}
     <fieldset class="swatches"><legend>Farbe</legend>${COLORS.map(c => `<label class="sw" title="${c.n}"><input type="radio" name="color" value="${c.v}" ${color === c.v ? "checked" : ""} aria-label="${c.n}"><span style="background:${c.v}"></span></label>`).join("")}</fieldset>
     ${d ? `<label class="check"><input type="checkbox" name="active" ${d.active ? "checked" : ""}> In der Strichliste anzeigen</label>` : ""}
     <button class="btn primary">${d ? "Speichern" : "Getränk anlegen"}</button>
@@ -635,6 +690,11 @@ async function startSession(u) {
   unsubs.push(onSnapshot(query(collection(db, "entries"), where("uid", "==", u.uid)), s => {
     S.mine = mapDocs(s).sort(byTsDesc); render();
   }, onErr));
+  // Einzahlungen; Fehler hier (z. B. Regeln noch nicht aktualisiert) sollen den Rest nicht stören
+  const depErr = e => console.warn("Einzahlungen nicht lesbar:", e?.code || e);
+  unsubs.push(onSnapshot(query(collection(db, "deposits"), where("uid", "==", u.uid)), s => {
+    S.myDeps = mapDocs(s).sort(byTsDesc); render();
+  }, depErr));
   if (S.me.role === "admin") {
     unsubs.push(onSnapshot(collection(db, "users"), s => {
       S.users = mapDocs(s).sort((a, b) => a.name.localeCompare(b.name, "de")); render();
@@ -642,6 +702,9 @@ async function startSession(u) {
     unsubs.push(onSnapshot(query(collection(db, "entries"), where("settled", "==", false)), s => {
       S.open = mapDocs(s).sort(byTsDesc); render();
     }, onErr));
+    unsubs.push(onSnapshot(query(collection(db, "deposits"), where("settled", "==", false)), s => {
+      S.openDeps = mapDocs(s).sort(byTsDesc); render();
+    }, depErr));
     unsubs.push(onSnapshot(query(collection(db, "entries"), orderBy("ts", "desc"), limit(300)), s => {
       S.recent = mapDocs(s); render();
     }, onErr));
@@ -695,7 +758,7 @@ async function showBooked(items, ids, sum) {
   const parts = texts.map(t => { const m = t.match(/^(.+?[.!?])\s+(.+)$/s); return m ? [m[1], m[2]] : [t, ""]; });
   const r = await dialog(`<div class="done-discs" data-done>${items.slice(0, 3).map(i => disc(i.d)).join("")}</div>
     ${parts.map(([h, sub]) => `<p class="done-head">${esc(h)}</p>${sub ? `<p class="done-sub">${esc(sub)}</p>` : ""}`).join("")}
-    <p class="done-sum">${esc(what)} gebucht, ${fmt(sum)}</p>
+    <p class="done-sum">${esc(what)} gebucht, ${fmt(sum)}${myBalance() > 0 ? `<br>Restguthaben: ${fmt(myBalance())}` : ""}</p>
     <div class="acts"><button type="submit" class="btn primary">Fertig</button>
     <button type="button" class="btn" data-r="undo">Rückgängig</button></div>`, null, 15000);
   if (r === "undo") undoMany(ids);
@@ -713,27 +776,58 @@ async function undo(id) {
   catch (e) { toast(msg(e), null, true); }
 }
 
-async function settle(uid) {
-  const list = S.open.filter(e => e.uid === uid);
-  if (!list.length) return;
-  const name = S.users.find(u => u.id === uid)?.name || list[0].userName;
-  if (!(await ask(`${name}: ${qty(list)} Getränke über ${fmt(total(list))} als bezahlt abrechnen?`, "Abrechnen"))) return;
+async function deposit(uid) {
+  const u = S.users.find(x => x.id === uid);
+  const name = u?.name || "?";
+  const v = await dialog(`<p>Guthaben für <b>${esc(name)}</b> einzahlen</p>
+    <label>Betrag in €<input name="amt" inputmode="decimal" value="20,00" required></label>
+    <label>Notiz (optional)<input name="note" maxlength="60" placeholder="z. B. bar in die Kasse"></label>
+    <div class="acts"><button type="button" class="btn" data-x>Abbrechen</button>
+    <button type="submit" class="btn primary">Einzahlen</button></div>`, "input");
+  if (v === null) return;
+  const amount = parseCents(v.amt);
+  if (!amount || amount <= 0 || amount > 100000) { toast("Betrag ungültig. Beispiel: 20 oder 20,50", null, true); return; }
   try {
-    for (let i = 0; i < list.length; i += 400) {
-      const b = writeBatch(db);
-      list.slice(i, i + 400).forEach(e => b.update(doc(db, "entries", e.id), { settled: true, settledAt: serverTimestamp(), settledBy: S.me.id }));
-      await b.commit();
+    await addDoc(collection(db, "deposits"), { uid, userName: name, amount, note: String(v.note || "").trim().slice(0, 60), kind: "deposit",
+      settled: false, ts: serverTimestamp(), by: S.me.id });
+    toast(`${fmt(amount)} Guthaben für ${name} eingetragen`);
+  } catch (e) { toast(msg(e), null, true); }
+}
+
+// Abrechnen: alles Offene wird verrechnet, der Fehlbetrag als Barzahlung festgehalten
+async function settle(uid) {
+  const list = S.open.filter(e => e.uid === uid), deps = S.openDeps.filter(x => x.uid === uid);
+  const b = depSum(deps) - total(list);
+  if (b >= 0) return;
+  const name = S.users.find(u => u.id === uid)?.name || list[0]?.userName || "?";
+  const credit = depSum(deps);
+  const q = credit
+    ? `${name}: ${qty(list)} Getränke über ${fmt(total(list))}, davon ${fmt(credit)} vom Guthaben. ${fmt(-b)} bar erhalten und abrechnen?`
+    : `${name}: ${qty(list)} Getränke über ${fmt(total(list))} als bezahlt abrechnen?`;
+  if (!(await ask(q, "Abrechnen"))) return;
+  try {
+    const ops = [...list.map(e => ["entries", e.id]), ...deps.map(x => ["deposits", x.id])];
+    for (let i = 0; i < ops.length || i === 0; i += 400) {
+      const bt = writeBatch(db);
+      ops.slice(i, i + 400).forEach(([c, id]) => bt.update(doc(db, c, id), { settled: true, settledAt: serverTimestamp(), settledBy: S.me.id }));
+      if (i + 400 >= ops.length) bt.set(doc(collection(db, "deposits")), { uid, userName: name, amount: -b, note: "", kind: "cash",
+        settled: true, ts: serverTimestamp(), by: S.me.id, settledAt: serverTimestamp(), settledBy: S.me.id });
+      await bt.commit();
     }
-    toast(`${name} abgerechnet: ${fmt(total(list))}`);
+    toast(`${name} abgerechnet: ${fmt(-b)} bar`);
   } catch (e) { toast(msg(e), null, true); }
 }
 
 async function exportCsv() {
   try {
     const rows = mapDocs(await getDocs(collection(db, "entries"))).sort(byTsDesc);
+    let deps = [];
+    try { deps = mapDocs(await getDocs(collection(db, "deposits"))).sort(byTsDesc); } catch {}
     const c = v => (v / 100).toFixed(2).replace(".", ",");
+    const kind = x => x.kind === "cash" ? "Bar bezahlt" : x.kind === "carry" ? "Restguthaben" : "Einzahlung";
     const lines = [["Datum", "Person", "Getränk", "Menge", "Einzelpreis", "Summe", "Status"]]
-      .concat(rows.map(e => [fdate(e), e.userName, e.drinkName, e.qty, c(e.price), c(e.price * e.qty), e.settled ? "abgerechnet" : "offen"]));
+      .concat(rows.map(e => [fdate(e), e.userName, e.drinkName, e.qty, c(e.price), c(e.price * e.qty), e.settled ? "abgerechnet" : "offen"]))
+      .concat(deps.map(x => [fdate(x), x.userName, kind(x) + (x.note ? ": " + x.note : ""), "", "", "-" + c(x.amount), x.settled ? "verrechnet" : "offen"]));
     const csv = "\ufeff" + lines.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(";")).join("\r\n");
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
@@ -761,6 +855,10 @@ document.addEventListener("click", async ev => {
       case "undo": undo(id); break;
       case "sel": S.sel = S.sel === id ? null : id; render(true); break;
       case "settle": settle(id); break;
+      case "deposit": deposit(id); break;
+      case "deldep":
+        if (await ask("Diese Einzahlung löschen?", "Löschen", true)) { await deleteDoc(doc(db, "deposits", id)); toast("Einzahlung gelöscht"); }
+        break;
       case "csv": exportCsv(); break;
       case "delentry":
         if (await ask("Diese Buchung löschen?", "Löschen", true)) { await deleteDoc(doc(db, "entries", id)); toast("Buchung gelöscht"); }
@@ -850,9 +948,15 @@ document.addEventListener("submit", async ev => {
         const data = { name: fd.name.trim(), price, color: safeColor(fd.color), order: Number(fd.order) || 0, message: String(fd.message || "").trim().slice(0, 160) };
         if (!data.name) throw { message: "Bitte einen Namen eingeben." };
         data.logoFill = fd.logofill === "on";
-        if (fd.logofile && fd.logofile.size) data.logo = await readLogo(fd.logofile);
-        else if (fd.logoclear === "on") data.logo = "";
-        else if (!f.dataset.id) data.logo = "";
+        const old = f.dataset.id ? logosOf(S.drinks.find(x => x.id === f.dataset.id) || {}) : [];
+        const del = new Set(new FormData(f).getAll("logodel").map(Number));
+        const files = [...(f.querySelector("input[name=logofile]")?.files || [])];
+        const logos = old.filter((_, i) => !del.has(i));
+        for (const file of files) logos.push(await readLogo(file));
+        if (logos.length > 8) throw { message: "Höchstens 8 Logos pro Getränk." };
+        if (logos.join("").length > 850000) throw { message: "Die Logos sind zusammen zu groß. Bitte kleinere Bilder oder weniger Logos verwenden." };
+        data.logos = logos;
+        data.logo = logos[0] || "";
         if (f.dataset.id) {
           data.active = fd.active === "on";
           await updateDoc(doc(db, "drinks", f.dataset.id), data);
