@@ -124,7 +124,8 @@ input:focus,select:focus{border-color:var(--accent-text);outline:none;box-shadow
 .drink-prev .disc .init{font-size:24px}
 .drink .fname{flex:1 1 170px}
 .drink .fprice,.drink .forder{width:110px}
-.drink .fmsg,.drink .flogo{flex-basis:100%}
+.drink .fmsg,.drink .flogo,.drink .fscale{flex-basis:100%}
+.fscale input{padding:0;accent-color:#fff;border:0;background:none}
 .logos{display:flex;flex-wrap:wrap;gap:10px;flex-basis:100%}
 .logos label{flex-direction:column;align-items:center;gap:4px;font-size:13px}
 .logos img{width:80px;height:40px;object-fit:cover;border-radius:8px;background:var(--surface);border:1px solid var(--line)}
@@ -225,7 +226,7 @@ const LOGIN_DOMAIN = "getraenkeliste.app";
 // Wie lange eine eigene Buchung rückgängig gemacht werden kann (muss zu firestore.rules passen)
 const UNDO_MINUTES = 5;
 // Versionsnummer, wird unter Konto angezeigt
-const APP_VERSION = "1.2";
+const APP_VERSION = "1.3";
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, initializeAuth, inMemoryPersistence, onAuthStateChanged, signInWithEmailAndPassword,
@@ -285,14 +286,16 @@ const textOn = c => { const h = safeColor(c), r = parseInt(h.slice(1, 3), 16), g
   return (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.6 ? "#111111" : "#FFFFFF"; };
 // Jedes Logo wird auf eine 2:1-Kachel gebracht: Hintergrundfarbe vom Bildrand übernommen,
 // das eigentliche Logo ausgeschnitten und so groß gesetzt wie beim Red-Bull-Logo
-// (max. 50 % der Kachelhöhe und 60 % der Breite, mittig).
-const LOGO_BOX_W = 0.60, LOGO_BOX_H = 0.50;
+// (Standard: max. 64 % der Kachelhöhe und 82 % der Breite, mittig; pro Getränk über "Logogröße" änderbar).
+const LOGO_BOX_W = 0.82, LOGO_BOX_H = 0.64;
+const logoScaleOf = d => { const v = Number(d?.logoScale); return v >= 50 && v <= 150 ? v : 100; };
 const normCache = new Map();
 const hex = (r, g, b) => "#" + [r, g, b].map(v => v.toString(16).padStart(2, "0")).join("").toUpperCase();
-function normalizeLogo(src) {
-  if (normCache.has(src)) return normCache.get(src);
-  const job = { url: null, bg: null, done: false };
-  normCache.set(src, job);
+function normalizeLogo(src, scale = 100) {
+  const key = scale + "|" + src;
+  if (normCache.has(key)) return normCache.get(key);
+  let resolve; const job = { url: null, bg: null, done: false, p: new Promise(r => { resolve = r; }) };
+  normCache.set(key, job);
   const img = new Image();
   img.onload = () => {
     try {
@@ -323,7 +326,8 @@ function normalizeLogo(src) {
       }
       if (x1 < 0) { x0 = 0; y0 = 0; x1 = w - 1; y1 = h - 1; }
       const cw = x1 - x0 + 1, ch = y1 - y0 + 1, W = 720, H = 360;
-      const sc = Math.min(W * LOGO_BOX_W / cw, H * LOGO_BOX_H / ch);
+      const f = scale / 100;
+      const sc = Math.min(W * Math.min(0.96, LOGO_BOX_W * f) / cw, H * Math.min(0.96, LOGO_BOX_H * f) / ch);
       const o = document.createElement("canvas"); o.width = W; o.height = H;
       const og = o.getContext("2d");
       if (bg) { og.fillStyle = `rgb(${bg[0]},${bg[1]},${bg[2]})`; og.fillRect(0, 0, W, H); }
@@ -333,21 +337,21 @@ function normalizeLogo(src) {
       job.url = webp.startsWith("data:image/webp") ? webp : o.toDataURL("image/png");
       job.bg = bg ? hex(...bg) : null;
     } catch (e) { console.warn("Logo nicht anpassbar", e); job.url = src; }
-    job.done = true; render();
+    job.done = true; resolve(job); render();
   };
-  img.onerror = () => { job.url = src; job.done = true; render(); };
+  img.onerror = () => { job.url = src; job.done = true; resolve(job); render(); };
   img.src = src;
   return job;
 }
 // Farben, die aus den Logos eines Getränks gelesen wurden
-const logoColors = d => [...new Set(logosOf(d).map(src => normalizeLogo(src).bg).filter(Boolean))];
+const logoColors = d => [...new Set(logosOf(d).map(src => normalizeLogo(src, logoScaleOf(d)).bg).filter(Boolean))];
 
 // Alle Logos eines Getränks (neu: Liste "logos", alt: einzelnes "logo")
 const logosOf = d => (Array.isArray(d.logos) && d.logos.length ? d.logos : [d.logo]).map(safeLogo).filter(Boolean);
 let logoTick = 0;
 const disc = (d, extra = "") => {
   const L = logosOf(d), multi = L.length > 1, on = logoTick % (L.length || 1);
-  const jobs = L.map(normalizeLogo), first = jobs[0]?.bg, bgc = first || safeColor(d.color);
+  const jobs = L.map(src => normalizeLogo(src, logoScaleOf(d))), first = jobs[0]?.bg, bgc = first || safeColor(d.color);
   return `<span class="disc${multi ? " multi" : ""}" ${multi ? `data-n="${L.length}"` : ""} style="background:${bgc};color:${textOn(bgc)}">${L.length
     ? jobs.map((j, i) => `<img src="${esc(j.done ? j.url : L[i])}" alt="" style="background:${j.bg || safeColor(d.color)}"${!j.done ? ' class="wait"' : multi && i === on ? ' class="on"' : ""}>`).join("")
     : `<span class="init" aria-hidden="true">${esc(initials(d.name))}</span>`}${extra}</span>`;
@@ -696,6 +700,7 @@ function drinkForm(d) {
     ${d && logosOf(d).length ? `<div class="logos">${logosOf(d).map((src, i) => `<label><img src="${esc(src)}" alt="Logo ${i + 1}"><span><input type="checkbox" name="logodel" value="${i}"> entfernen</span></label>`).join("")}</div>` : ""}
     <label class="flogo">${d && logosOf(d).length ? "Weitere Logos hinzufügen" : "Logo"} (optional, PNG, JPG oder WebP, mehrere möglich; ab 2 Logos wechseln sie automatisch)<input type="file" name="logofile" accept="image/png,image/jpeg,image/webp" multiple></label>
 
+    ${d && logosOf(d).length ? `<label class="fscale">Logogröße: <b data-scale-out>${logoScaleOf(d)} %</b><input type="range" name="logoscale" min="50" max="150" step="5" value="${logoScaleOf(d)}"></label>` : ""}
     <fieldset class="swatches"><legend>Farbe (nur sichtbar bei Logos ohne eigenen Hintergrund)</legend>${d && logoColors(d).length ? `<span class="from">Aus den Logos:</span>${logoColors(d).map(v => `<label class="sw" title="${v}"><input type="radio" name="color" value="${v}" ${color === v ? "checked" : ""} aria-label="Farbe aus Logo ${v}"><span style="background:${v}"></span></label>`).join("")}<span class="from">Standard:</span>` : ""}${COLORS.map(c => `<label class="sw" title="${c.n}"><input type="radio" name="color" value="${c.v}" ${color === c.v ? "checked" : ""} aria-label="${c.n}"><span style="background:${c.v}"></span></label>`).join("")}</fieldset>
     ${d ? `<label class="check"><input type="checkbox" name="active" ${d.active ? "checked" : ""}> In der Strichliste anzeigen</label>` : ""}
     <button class="btn primary">${d ? "Speichern" : "Getränk anlegen"}</button>
@@ -951,6 +956,16 @@ document.addEventListener("click", async ev => {
   } catch (e) { toast(msg(e), null, true); }
 });
 
+document.addEventListener("input", e => {
+  if (e.target.name !== "logoscale") return;
+  const f = e.target.closest("form"), v = Number(e.target.value);
+  const out = f.querySelector("[data-scale-out]"); if (out) out.textContent = v + " %";
+  const d = S.drinks.find(x => x.id === f.dataset.id); if (!d) return;
+  const box = f.querySelector(".drink-prev");
+  Promise.all(logosOf(d).map(src => normalizeLogo(src, v).p)).then(() => {
+    if (Number(e.target.value) === v && box.isConnected) box.innerHTML = disc({ ...d, logoScale: v });
+  });
+});
 document.addEventListener("change", e => {
   if (e.target.name === "color") {
     const p = e.target.closest("form")?.querySelector(".drink-prev .disc:not(:has(img))");
@@ -1020,6 +1035,7 @@ document.addEventListener("submit", async ev => {
         data.logos = logos;
         data.logo = logos[0] || "";
         data.logoFill = true;
+        if (fd.logoscale) data.logoScale = Math.max(50, Math.min(150, Number(fd.logoscale) || 100));
         if (f.dataset.id) {
           data.active = fd.active === "on";
           await updateDoc(doc(db, "drinks", f.dataset.id), data);
