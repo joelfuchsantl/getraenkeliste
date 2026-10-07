@@ -148,7 +148,15 @@ input:focus,select:focus{border-color:var(--accent-text);outline:none;box-shadow
 .check{flex-direction:row;align-items:center;gap:8px;color:var(--ink);flex-basis:100%}
 
 /* Login */
-.auth{min-height:100svh;display:grid;place-items:center;padding:24px}
+.auth{position:relative;z-index:1;min-height:100svh;display:grid;place-items:center;padding:24px}
+/* Login: Kachel fällt rein, Titel springt auf, Formular gleitet nach; dahinter steigen dauerhaft Bläschen */
+.auth .auth-mark{animation:drop .8s cubic-bezier(.2,1.5,.4,1) .1s both}
+.auth h1{animation:pop .55s cubic-bezier(.2,1.6,.4,1) .45s both}
+.auth p.intro{animation:rise-in .5s ease-out .65s both}
+.auth form{animation:rise-in .5s ease-out .8s both}
+.fizz.loop{z-index:0;display:none}
+.fizz.loop.show{display:block}
+.fizz.loop i{border-color:rgba(255,255,255,.35);background:rgba(255,255,255,.05);animation:bubble var(--d) linear var(--w) infinite}
 .auth-box{width:100%;max-width:340px}
 .auth-mark{width:132px;aspect-ratio:2/1;border-radius:18px;background:#F2F2F2;color:#000;display:grid;place-items:center;margin-bottom:22px;font:800 38px/1 var(--display);letter-spacing:.02em;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
 .auth h1{font:800 44px/1 var(--display);margin:0 0 6px}
@@ -221,7 +229,8 @@ body:has(.cart) .toast{bottom:calc(110px + env(safe-area-inset-bottom,0px))}
 @media (prefers-reduced-motion:reduce){
   .disc,.toast,.disc.multi img{transition:none}
   .done-discs .disc,.ask .done-head,.ask .done-sub,.ask .done-sum{animation:none}
-  .fizz{display:none}
+  .fizz,.fizz.loop.show{display:none}
+  .auth .auth-mark,.auth h1,.auth p.intro,.auth form{animation:none}
   .pbtn:active .disc{transform:none}
 }
 </style>
@@ -248,7 +257,7 @@ const LOGIN_DOMAIN = "getraenkeliste.app";
 // Wie lange eine eigene Buchung rückgängig gemacht werden kann (muss zu firestore.rules passen)
 const UNDO_MINUTES = 5;
 // Versionsnummer, wird unter Konto angezeigt
-const APP_VERSION = "1.7";
+const APP_VERSION = "1.8";
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, initializeAuth, inMemoryPersistence, onAuthStateChanged, signInWithEmailAndPassword,
@@ -577,10 +586,24 @@ function inputFocused() {
   const a = document.activeElement;
   return a && $app.contains(a) && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName);
 }
+let loginFizz = null;
+function loginBubbles(show) {   // eine feste Ebene, damit die Bläschen beim Neuzeichnen nicht neu starten
+  if (!loginFizz) {
+    loginFizz = document.createElement("div"); loginFizz.className = "fizz loop"; loginFizz.setAttribute("aria-hidden", "true");
+    let html = "";
+    for (let i = 0; i < 30; i++) {
+      const size = 4 + Math.random() * 14, d = 6 + Math.random() * 7;
+      html += `<i style="left:${(Math.random() * 100).toFixed(1)}%;width:${size.toFixed(0)}px;height:${size.toFixed(0)}px;--x:${(Math.random() * 50 - 25).toFixed(0)}px;--d:${d.toFixed(2)}s;--w:${(-Math.random() * d).toFixed(2)}s"></i>`;
+    }
+    loginFizz.innerHTML = html; document.body.appendChild(loginFizz);
+  }
+  loginFizz.classList.toggle("show", show);
+}
 function render(force) {
   if (!force && inputFocused()) { S.pending = true; return; }
   S.pending = false;
   $app.innerHTML = view();
+  loginBubbles(!!$app.querySelector(".auth"));
 }
 document.addEventListener("focusout", () => setTimeout(() => { if (S.pending && !inputFocused()) render(); }, 800));
 setInterval(() => { if (S.me && S.view === "list") render(); }, 20000);
