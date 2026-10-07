@@ -248,7 +248,7 @@ const LOGIN_DOMAIN = "getraenkeliste.app";
 // Wie lange eine eigene Buchung rückgängig gemacht werden kann (muss zu firestore.rules passen)
 const UNDO_MINUTES = 5;
 // Versionsnummer, wird unter Konto angezeigt
-const APP_VERSION = "1.6.2";
+const APP_VERSION = "1.7";
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, initializeAuth, inMemoryPersistence, onAuthStateChanged, signInWithEmailAndPassword,
@@ -477,6 +477,31 @@ const ask = (text, ok = "OK", danger = false) => dialog(`<p>${esc(text)}</p><div
 const askText = (label, value, ok = "OK") => dialog(`<label>${esc(label)}<input value="${esc(value)}" maxlength="30"></label><div class="acts">
   <button type="button" class="btn" data-x>Abbrechen</button>
   <button type="submit" class="btn primary">${esc(ok)}</button></div>`, "input");
+
+/* ---------- Automatische Updates ---------- */
+// Holt die aktuelle index.html am Zwischenspeicher vorbei und vergleicht die Versionsnummer.
+// Ist eine neuere online, lädt die App sich neu (aber nie mitten im Buchen oder Tippen).
+let lastCheck = 0, newVersion = null;
+async function checkUpdate(force) {
+  if (!/^https?:$/.test(location.protocol)) return;
+  if (!force && Date.now() - lastCheck < 60000) return;
+  lastCheck = Date.now();
+  try {
+    const r = await fetch(location.pathname + "?check=" + Date.now(), { cache: "no-store" });
+    if (!r.ok) return;
+    const m = (await r.text()).match(/const APP_VERSION = "([^"]+)"/);
+    if (m && m[1] !== APP_VERSION) { newVersion = m[1]; applyUpdate(); }
+  } catch {}
+}
+function applyUpdate() {
+  if (!newVersion) return;
+  const busy = Object.keys(S.cart || {}).length || document.querySelector(".ask") || inputFocused();
+  if (busy) { setTimeout(applyUpdate, 5000); return; }
+  location.replace(location.pathname + "?v=" + encodeURIComponent(newVersion));
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") checkUpdate(); });
+setInterval(() => checkUpdate(), 10 * 60000);
+setTimeout(() => checkUpdate(true), 2500);
 
 /* ---------- Buchungs-Effekt: Sound und Bläschen ---------- */
 // Ton wird mit der Web-Audio-Schnittstelle erzeugt, es braucht keine Sounddateien
@@ -824,6 +849,7 @@ function aUsers() {
 
 /* ---------- Sitzung ---------- */
 async function startSession(u) {
+  checkUpdate(true);
   teardown();
   S.user = u;
   let snap = null;
