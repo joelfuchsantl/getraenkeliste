@@ -124,7 +124,8 @@ input:focus,select:focus{border-color:var(--accent-text);outline:none;box-shadow
 .drink-prev .disc .init{font-size:24px}
 .drink .fname{flex:1 1 170px}
 .drink .fprice,.drink .forder{width:110px}
-.drink .fmsg,.drink .flogo,.drink .fscale{flex-basis:100%}
+.drink .fmsg,.drink .flogo,.drink .fscale,.drink .fsecs{flex-basis:100%}
+.fsecs input{padding:0;accent-color:#fff;border:0;background:none}
 .fscale input{padding:0;accent-color:#fff;border:0;background:none}
 .logos{display:flex;flex-direction:column;gap:12px;flex-basis:100%}
 .logo-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:10px;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
@@ -229,7 +230,7 @@ const LOGIN_DOMAIN = "getraenkeliste.app";
 // Wie lange eine eigene Buchung rückgängig gemacht werden kann (muss zu firestore.rules passen)
 const UNDO_MINUTES = 5;
 // Versionsnummer, wird unter Konto angezeigt
-const APP_VERSION = "1.4";
+const APP_VERSION = "1.5";
 
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
 import { getAuth, initializeAuth, inMemoryPersistence, onAuthStateChanged, signInWithEmailAndPassword,
@@ -353,23 +354,33 @@ const logoColors = d => [...new Set(logosOf(d).map((src, i) => normalizeLogo(src
 
 // Alle Logos eines Getränks (neu: Liste "logos", alt: einzelnes "logo")
 const logosOf = d => (Array.isArray(d.logos) && d.logos.length ? d.logos : [d.logo]).map(safeLogo).filter(Boolean);
-let logoTick = 0;
+// Wechseldauer pro Getränk in Sekunden (Standard 3 s)
+const secsOf = d => { const v = Number(d?.logoSecs); return v >= 1 && v <= 60 ? v : 3; };
+const curIdx = (n, ms) => Math.floor(Date.now() / ms) % n;
 const disc = (d, extra = "") => {
-  const L = logosOf(d), multi = L.length > 1, on = logoTick % (L.length || 1);
+  const L = logosOf(d), multi = L.length > 1, ms = secsOf(d) * 1000, on = multi ? curIdx(L.length, ms) : 0;
   const jobs = L.map((src, i) => normalizeLogo(src, scaleAt(d, i))), first = jobs[0]?.bg, bgc = first || safeColor(d.color);
-  return `<span class="disc${multi ? " multi" : ""}" ${multi ? `data-n="${L.length}"` : ""} style="background:${bgc};color:${textOn(bgc)}">${L.length
+  return `<span class="disc${multi ? " multi" : ""}" ${multi ? `data-n="${L.length}" data-ms="${ms}" data-cur="${on}"` : ""} style="background:${bgc};color:${textOn(bgc)}">${L.length
     ? jobs.map((j, i) => `<img src="${esc(j.done ? j.url : L[i])}" alt="" style="background:${j.bg || safeColor(d.color)}"${!j.done ? ' class="wait"' : multi && i === on ? ' class="on"' : ""}>`).join("")
     : `<span class="init" aria-hidden="true">${esc(initials(d.name))}</span>`}${extra}</span>`;
 };
 // Logo-Wechsel alle 2,6 s, ohne die Seite neu aufzubauen
+// Das bisherige Logo bleibt kurz darunter stehen, das neue blendet immer von unsichtbar ein
 setInterval(() => {
-  logoTick++;
   document.querySelectorAll(".disc.multi").forEach(el => {
-    const n = +el.dataset.n || 1, imgs = el.querySelectorAll("img");
-    const cur = logoTick % n, prev = (logoTick - 1 + n) % n;
-    imgs.forEach((im, i) => { if (im.classList.contains("wait")) return; im.classList.toggle("on", i === cur); im.classList.toggle("prev", i === prev); });
+    const n = +el.dataset.n || 1, ms = +el.dataset.ms || 3000, cur = curIdx(n, ms), last = +el.dataset.cur;
+    if (cur === last) return;
+    const imgs = el.querySelectorAll("img"), next = imgs[cur], old = imgs[last];
+    if (!next || next.classList.contains("wait")) return;
+    el.dataset.cur = cur;
+    imgs.forEach(im => { if (im !== old && im !== next) { im.style.transition = "none"; im.classList.remove("on", "prev"); } });
+    next.style.transition = "none"; next.classList.remove("on", "prev");
+    void next.offsetWidth;                      // Startzustand (unsichtbar) festhalten
+    imgs.forEach(im => { im.style.transition = ""; });
+    if (old) { old.classList.remove("on"); old.classList.add("prev"); }
+    next.classList.add("on");
   });
-}, 2600);
+}, 200);
 // Logo-Datei verkleinern (max. 256 px) und als PNG-Daten speichern, passt so ins Getränke-Dokument
 function readLogo(file) {
   return new Promise((res, rej) => {
@@ -709,7 +720,7 @@ function drinkForm(d) {
       </div>`).join("")}</div>` : ""}
     <label class="flogo">${d && logosOf(d).length ? "Weitere Logos hinzufügen" : "Logo"} (optional, PNG, JPG oder WebP, mehrere möglich; ab 2 Logos wechseln sie automatisch)<input type="file" name="logofile" accept="image/png,image/jpeg,image/webp" multiple></label>
 
-    <fieldset class="swatches"><legend>Farbe (nur sichtbar bei Logos ohne eigenen Hintergrund)</legend>${d && logoColors(d).length ? `<span class="from">Aus den Logos:</span>${logoColors(d).map(v => `<label class="sw" title="${v}"><input type="radio" name="color" value="${v}" ${color === v ? "checked" : ""} aria-label="Farbe aus Logo ${v}"><span style="background:${v}"></span></label>`).join("")}<span class="from">Standard:</span>` : ""}${COLORS.map(c => `<label class="sw" title="${c.n}"><input type="radio" name="color" value="${c.v}" ${color === c.v ? "checked" : ""} aria-label="${c.n}"><span style="background:${c.v}"></span></label>`).join("")}</fieldset>
+    ${d && logosOf(d).length > 1 ? `<label class="fsecs">Logo wechselt alle <b data-secs-out>${secsOf(d)} s</b><input type="range" name="logosecs" min="1" max="20" step="1" value="${secsOf(d)}" aria-label="Wechseldauer in Sekunden"></label>` : ""}
     ${d ? `<label class="check"><input type="checkbox" name="active" ${d.active ? "checked" : ""}> In der Strichliste anzeigen</label>` : ""}
     <button class="btn primary">${d ? "Speichern" : "Getränk anlegen"}</button>
     <p class="err"></p>
@@ -965,6 +976,7 @@ document.addEventListener("click", async ev => {
 });
 
 document.addEventListener("input", e => {
+  if (e.target.name === "logosecs") { const o = e.target.closest("form").querySelector("[data-secs-out]"); if (o) o.textContent = e.target.value + " s"; return; }
   if (!/^logoscale_\d+$/.test(e.target.name || "")) return;
   const f = e.target.closest("form"), row = e.target.closest(".logo-row"), i = Number(e.target.dataset.i), v = Number(e.target.value);
   const out = row.querySelector("[data-scale-out]"); if (out) out.textContent = v + " %";
@@ -1035,7 +1047,8 @@ document.addEventListener("submit", async ev => {
       case "drink": {
         const price = parseCents(fd.price);
         if (price === null) throw { message: "Preis ungültig. Beispiel: 2,50" };
-        const data = { name: fd.name.trim(), price, color: safeColor(fd.color), order: Number(fd.order) || 0, message: String(fd.message || "").trim().slice(0, 160) };
+        const prevDrink = f.dataset.id ? S.drinks.find(x => x.id === f.dataset.id) : null;
+        const data = { name: fd.name.trim(), price, color: safeColor(prevDrink?.color || "#F2F2F2"), order: Number(fd.order) || 0, message: String(fd.message || "").trim().slice(0, 160) };
         if (!data.name) throw { message: "Bitte einen Namen eingeben." };
         const old = f.dataset.id ? logosOf(S.drinks.find(x => x.id === f.dataset.id) || {}) : [];
         const del = new Set(new FormData(f).getAll("logodel").map(Number));
@@ -1049,6 +1062,7 @@ document.addEventListener("submit", async ev => {
         data.logo = logos[0] || "";
         data.logoFill = true;
         data.logoScales = logoScales;
+        if (fd.logosecs) data.logoSecs = Math.max(1, Math.min(20, Number(fd.logosecs) || 3));
         data.logoScale = 100;
         if (f.dataset.id) {
           data.active = fd.active === "on";
